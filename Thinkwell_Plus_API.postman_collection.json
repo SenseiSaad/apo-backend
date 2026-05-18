@@ -1,0 +1,799 @@
+{
+	"info": {
+		"_postman_id": "Apothecary-plus-api-2024",
+		"name": "Apothecary API",
+		"description": "Complete API collection for Apothecary Clinic Platform",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{access_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "access_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "refresh_token",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "session_id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "activity_id",
+			"value": "",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:3000/health",
+							"protocol": "http",
+							"host": ["localhost"],
+							"port": "3000",
+							"path": ["health"]
+						},
+						"description": "Check if API is running"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Register Patient",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.user_id) {",
+									"        pm.collectionVariables.set('user_id', response.data.user_id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"patient@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"full_name\": \"John Doe\",\n  \"role\": \"patient\",\n  \"date_of_birth\": \"1990-01-15\",\n  \"phone_number\": \"+1234567890\",\n  \"timezone\": \"America/New_York\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register"]
+						},
+						"description": "Register a new patient account"
+					},
+					"response": []
+				},
+				{
+					"name": "Verify Email",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"user_id\": \"{{user_id}}\",\n  \"otp\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/verify-email",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "verify-email"]
+						},
+						"description": "Verify email with OTP (check console logs for OTP in development)"
+					},
+					"response": []
+				},
+				{
+					"name": "Resend OTP",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"patient@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/resend-otp",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "resend-otp"]
+						},
+						"description": "Resend OTP for email verification"
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.data) {",
+									"        pm.collectionVariables.set('access_token', response.data.access_token);",
+									"        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+									"        pm.collectionVariables.set('user_id', response.data.user.user_id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"patient@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						},
+						"description": "Login with email and password"
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.data) {",
+									"        pm.collectionVariables.set('access_token', response.data.access_token);",
+									"        pm.collectionVariables.set('refresh_token', response.data.refresh_token);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "refresh"]
+						},
+						"description": "Get new access token using refresh token"
+					},
+					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "logout"]
+						},
+						"description": "Logout and invalidate tokens"
+					},
+					"response": []
+				},
+				{
+					"name": "Forgot Password",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"patient@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "forgot-password"]
+						},
+						"description": "Request mobile password reset OTP (check console logs for OTP in development)"
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"patient@example.com\",\n  \"otp\": \"123456\",\n  \"password\": \"NewSecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "reset-password"]
+						},
+						"description": "Reset patient password with email OTP"
+					},
+					"response": []
+				},
+				{
+					"name": "MFA Setup",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/mfa/setup",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "mfa", "setup"]
+						},
+						"description": "Setup MFA/TOTP (returns QR code)"
+					},
+					"response": []
+				},
+				{
+					"name": "MFA Verify",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/mfa/verify",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "mfa", "verify"]
+						},
+						"description": "Verify and enable MFA"
+					},
+					"response": []
+				},
+				{
+					"name": "MFA Disable",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"password\": \"SecurePass123!\",\n  \"code\": \"123456\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/mfa/disable",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "mfa", "disable"]
+						},
+						"description": "Disable MFA"
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Invite",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"invite_token_here\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/invite/validate",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "invite", "validate"]
+						},
+						"description": "Validate Doctor invite token"
+					},
+					"response": []
+				},
+				{
+					"name": "Complete Invite",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"invite_token_here\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/invite/complete",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "invite", "complete"]
+						},
+						"description": "Complete invite and set password"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Patient",
+			"item": [
+				{
+					"name": "Get Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/patient/profile",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "profile"]
+						},
+						"description": "Get patient profile with tier, subscription, and Doctor info. Avatar state is intentionally excluded from this response."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Profile",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"full_name\": \"John Doe\",\n  \"date_of_birth\": \"1990-01-15\",\n  \"phone_number\": \"+1234567890\",\n  \"timezone\": \"America/Los_Angeles\",\n  \"preferences\": {\n    \"notifications_enabled\": true,\n    \"email_notifications\": true,\n    \"push_notifications\": true,\n    \"theme\": \"dark\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/patient/profile",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "profile"]
+						},
+						"description": "Update patient profile fields. Send one or more fields. Avatar updates are handled separately and are intentionally excluded from this endpoint."
+					},
+					"response": []
+				},
+				{
+					"name": "Save Avatar",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"customization\": {\n    \"skin_tone\": \"medium\",\n    \"hair_style\": \"short\",\n    \"hair_color\": \"brown\",\n    \"outfit\": \"casual\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/patient/avatar",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "avatar"]
+						},
+						"description": "Save avatar customization"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Home Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/patient/home-data",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "home-data"]
+						},
+						"description": "Get dashboard data (activities, sessions, chats, stats)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Token Usage",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/patient/token-usage",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "token-usage"]
+						},
+						"description": "Get AI token usage stats"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Subscription",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/patient/subscription",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "subscription"]
+						},
+						"description": "Get subscription information"
+					},
+					"response": []
+				},
+				{
+					"name": "Submit Doctor Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"I would like to connect with a Doctor for anxiety management.\",\n  \"preferred_specialization\": \"anxiety\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/patient/doctor-request",
+							"host": ["{{base_url}}"],
+							"path": ["patient", "Doctor-request"]
+						},
+						"description": "Submit request for Doctor (Free tier users)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Activities",
+			"item": [
+				{
+					"name": "Get Activities",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/activities?start_date=2024-01-01&end_date=2024-12-31&activity_type=meditation&status=completed",
+							"host": ["{{base_url}}"],
+							"path": ["activities"],
+							"query": [
+								{
+									"key": "start_date",
+									"value": "2024-01-01",
+									"description": "Optional"
+								},
+								{
+									"key": "end_date",
+									"value": "2024-12-31",
+									"description": "Optional"
+								},
+								{
+									"key": "activity_type",
+									"value": "meditation",
+									"description": "Optional: breathing, meditation, journaling, mood_checkin, reading, physical, custom"
+								},
+								{
+									"key": "status",
+									"value": "completed",
+									"description": "Optional: pending, completed"
+								}
+							]
+						},
+						"description": "Get activity calendar with filters (Requires Basic or Premium tier)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Activity Detail",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Set activity_id from collection variable or use a sample ID",
+									"if (!pm.collectionVariables.get('activity_id')) {",
+									"    pm.collectionVariables.set('activity_id', '507f1f77bcf86cd799439011');",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/activities/{{activity_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["activities", "{{activity_id}}"]
+						},
+						"description": "Get single activity details"
+					},
+					"response": []
+				},
+				{
+					"name": "Complete Activity",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notes\": \"Felt very relaxed after 15 minutes of meditation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/activities/{{activity_id}}/complete",
+							"host": ["{{base_url}}"],
+							"path": ["activities", "{{activity_id}}", "complete"]
+						},
+						"description": "Mark activity as completed (updates streak and avatar)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Activity Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/activities/stats",
+							"host": ["{{base_url}}"],
+							"path": ["activities", "stats"]
+						},
+						"description": "Get activity statistics (streak, completion rate, avatar progress)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chat",
+			"item": [
+				{
+					"name": "Send Message",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.data && response.data.session_id) {",
+									"        pm.collectionVariables.set('session_id', response.data.session_id);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"I've been feeling anxious lately. Can you help me?\",\n  \"session_id\": \"{{session_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/chat/message",
+							"host": ["{{base_url}}"],
+							"path": ["chat", "message"]
+						},
+						"description": "Send message to AI (creates new session if session_id not provided)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Chat History",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chat/history?session_id={{session_id}}&limit=50",
+							"host": ["{{base_url}}"],
+							"path": ["chat", "history"],
+							"query": [
+								{
+									"key": "session_id",
+									"value": "{{session_id}}",
+									"description": "Required"
+								},
+								{
+									"key": "limit",
+									"value": "50",
+									"description": "Optional, default 50"
+								}
+							]
+						},
+						"description": "Get chat message history for a session"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Chat Sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chat/sessions?limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["chat", "sessions"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Optional, default 20"
+								}
+							]
+						},
+						"description": "Get all chat sessions for user"
+					},
+					"response": []
+				},
+				{
+					"name": "End Session",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chat/sessions/{{session_id}}/end",
+							"host": ["{{base_url}}"],
+							"path": ["chat", "sessions", "{{session_id}}", "end"]
+						},
+						"description": "End a chat session"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
