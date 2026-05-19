@@ -40,6 +40,7 @@ export class AuthService {
         password: string;
         role: Role;
         invite_token?: string;
+        illness_description?: string;
     }) {
         if (data.role !== Role.PATIENT) {
             throw new BadRequestError('Only patients can self-register. Staff accounts must be created by the Super Admin.');
@@ -89,6 +90,11 @@ export class AuthService {
             await Patient.create({
                 user_id: user._id,
                 doctor_id: inviteData?.doctor_id,
+                doctor_assigned_at: inviteData?.doctor_id ? new Date() : undefined,
+                doctor_assignment_source: inviteData?.doctor_id ? 'invite' : undefined,
+                care_status: inviteData?.doctor_id ? 'assigned' : 'needs_care',
+                illness_description: data.illness_description,
+                care_status_updated_at: new Date(),
                 onboarding_source: inviteData ? 'invite' : 'self_register',
                 avatar_state: {
                     posture: 'slouched',
@@ -115,6 +121,7 @@ export class AuthService {
                 assigned_doctor_ids: [],
                 permissions: {
                     can_view_assigned_patients: true,
+                    can_assign_patients: false,
                     can_manage_bookings: true,
                     can_send_communications: true
                 }

@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../../types/express';
 import { adminService } from './admin.service';
 import { avatarSettingsService } from '../../services/avatarSettings.service';
+import { patientAssignmentService } from '../../services/patientAssignment.service';
 import {
     AdminForgotPasswordInput,
     AdminResendSignupOtpInput,
@@ -17,7 +18,10 @@ import {
     CreateDoctorAccountInput,
     GetActiveAssistantsQueryInput,
     GetActiveDoctorsQueryInput,
+    GetAssignablePatientsQueryInput,
+    AssignPatientDoctorInput,
     SetAssistantDoctorsInput,
+    PatientIdParamInput,
     doctorIdParamInput,
     UpdateDoctorAccountInput,
     UpdateAssistantInput,
@@ -220,6 +224,67 @@ export class AdminController {
     async getActiveDoctors(req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, GetActiveDoctorsQueryInput>, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await adminService.getActiveDoctors(req.query);
+
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getAssignablePatients(req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, GetAssignablePatientsQueryInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await patientAssignmentService.listAssignablePatients(req.query);
+
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async assignPatientToDoctor(
+        req: AuthRequest<PatientIdParamInput, Record<string, never>, AssignPatientDoctorInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const adminUserId = req.user?.user_id;
+            if (!adminUserId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await patientAssignmentService.assignPatientToDoctor({
+                patientId: req.params.patientId,
+                doctorId: req.body.doctor_id,
+                actorUserId: adminUserId,
+                source: 'admin',
+                force: req.body.force
+            });
+
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async unassignPatientFromDoctor(req: AuthRequest<PatientIdParamInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const adminUserId = req.user?.user_id;
+            if (!adminUserId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await patientAssignmentService.unassignPatient(req.params.patientId, adminUserId, 'admin');
 
             res.json({
                 success: true,

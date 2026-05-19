@@ -5,6 +5,7 @@ import { validate } from '../../middleware/validate';
 import { Role } from '../../models/enums';
 import {
     updateProfileSchema,
+    updateCareStatusSchema,
     assignAvatarSchema,
     DoctorRequestSchema,
     patientInviteIdParamSchema
@@ -19,6 +20,7 @@ router.use(requireRole([Role.PATIENT]));
 // Profile routes
 router.get('/profile', patientController.getProfile.bind(patientController));
 router.patch('/profile', validate(updateProfileSchema), patientController.updateProfile.bind(patientController));
+router.patch('/care-status', validate(updateCareStatusSchema), patientController.updateCareStatus.bind(patientController));
 
 // Avatar
 router.post('/avatar/assign', validate(assignAvatarSchema), patientController.assignAvatar.bind(patientController));

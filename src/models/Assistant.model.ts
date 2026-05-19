@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export interface IAssistantPermissions {
     can_view_assigned_patients: boolean;
+    can_assign_patients: boolean;
     can_manage_bookings: boolean;
     can_send_communications: boolean;
 }
@@ -17,6 +18,7 @@ export interface IAssistant extends Document {
 
 const AssistantPermissionsSchema = new Schema<IAssistantPermissions>({
     can_view_assigned_patients: { type: Boolean, default: true },
+    can_assign_patients: { type: Boolean, default: false },
     can_manage_bookings: { type: Boolean, default: true },
     can_send_communications: { type: Boolean, default: true }
 }, { _id: false });

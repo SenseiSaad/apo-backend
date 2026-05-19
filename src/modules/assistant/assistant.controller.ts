@@ -4,6 +4,7 @@ import { assistantService } from './assistant.service';
 import {
     AssistantBookingIdParamInput,
     AssistantPatientIdParamInput,
+    AssignAssistantPatientDoctorInput,
     SendAssistantPatientMessageInput,
     UpdateAssistantBookingStatusInput
 } from '../../validators/assistant.validator';
@@ -39,6 +40,19 @@ export class AssistantController {
     async getPatient(req: AuthRequest<AssistantPatientIdParamInput>, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await assistantService.getPatient(req.user!.user_id, req.params.patientId);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async assignPatientToDoctor(
+        req: AuthRequest<AssistantPatientIdParamInput, Record<string, never>, AssignAssistantPatientDoctorInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.assignPatientToDoctor(req.user!.user_id, req.params.patientId, req.body.doctor_id, req.body.force);
             res.json({ success: true, data: result });
         } catch (error) {
             next(error);

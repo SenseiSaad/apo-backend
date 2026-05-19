@@ -3,6 +3,7 @@ import { AuthRequest } from '../../types/express';
 import { patientService } from './patient.service';
 import {
     UpdateProfileInput,
+    UpdateCareStatusInput,
     AssignAvatarInput,
     DoctorRequestInput,
     PatientInviteIdParamInput
@@ -48,6 +49,27 @@ export class PatientController {
             }
 
             const result = await patientService.updateProfile(user_id, req.body);
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updateCareStatus(req: AuthRequest<Record<string, never>, Record<string, never>, UpdateCareStatusInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const user_id = req.user?.user_id;
+            if (!user_id) {
+                res.status(401).json({
+                    success: false,
+                    message: 'Unauthorized'
+                });
+                return;
+            }
+
+            const result = await patientService.updateCareStatus(user_id, req.body);
             res.json({
                 success: true,
                 data: result

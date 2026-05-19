@@ -90,6 +90,7 @@ export const updateDoctorAccountSchema = z.object({
 
 const AssistantPermissionsSchema = z.object({
     can_view_assigned_patients: z.boolean().optional(),
+    can_assign_patients: z.boolean().optional(),
     can_manage_bookings: z.boolean().optional(),
     can_send_communications: z.boolean().optional()
 });
@@ -138,6 +139,37 @@ export const AssistantDoctorParamSchema = z.object({
     doctorId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Doctor ID')
 });
 
+export const patientIdParamSchema = z.object({
+    patientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID')
+});
+
+export const getAssignablePatientsQuerySchema = z.object({
+    page: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).optional().default(1)
+    ),
+    limit: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).max(500).optional().default(20)
+    ),
+    search: z.string().trim().min(1).max(100).optional(),
+    care_status: z.enum(['needs_care', 'assigned', 'in_treatment', 'treated', 'inactive']).optional(),
+    assigned: z.preprocess(
+        value => {
+            if (value === undefined) {
+                return undefined;
+            }
+            return value === true || value === 'true';
+        },
+        z.boolean().optional()
+    )
+});
+
+export const assignPatientDoctorSchema = z.object({
+    doctor_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Doctor ID'),
+    force: z.boolean().optional().default(false)
+});
+
 export const AssistantSetupTokenSchema = z.object({
     token: z.string().min(32, 'Setup token is required')
 });
@@ -165,5 +197,8 @@ export type assistantIdParamInput = z.infer<typeof assistantIdParamSchema>;
 export type UpdateAssistantInput = z.infer<typeof updateAssistantSchema>;
 export type SetAssistantDoctorsInput = z.infer<typeof setAssistantDoctorsSchema>;
 export type AssistantDoctorParamInput = z.infer<typeof AssistantDoctorParamSchema>;
+export type PatientIdParamInput = z.infer<typeof patientIdParamSchema>;
+export type GetAssignablePatientsQueryInput = z.infer<typeof getAssignablePatientsQuerySchema>;
+export type AssignPatientDoctorInput = z.infer<typeof assignPatientDoctorSchema>;
 export type AssistantSetupTokenInput = z.infer<typeof AssistantSetupTokenSchema>;
 export type CompleteAssistantSetupInput = z.infer<typeof completeAssistantSetupSchema>;

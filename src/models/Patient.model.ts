@@ -17,6 +17,12 @@ export interface IPatient extends Document {
     _id: mongoose.Types.ObjectId;
     user_id: mongoose.Types.ObjectId;
     doctor_id?: mongoose.Types.ObjectId;
+    doctor_assigned_at?: Date;
+    doctor_assigned_by?: mongoose.Types.ObjectId;
+    doctor_assignment_source?: 'admin' | 'assistant' | 'invite' | 'system';
+    care_status: 'needs_care' | 'assigned' | 'in_treatment' | 'treated' | 'inactive';
+    illness_description?: string;
+    care_status_updated_at?: Date;
     onboarding_source: 'invite' | 'self_register';
     full_name?: string;
     date_of_birth?: Date;
@@ -63,6 +69,20 @@ const PatientSchema = new Schema<IPatient>(
     {
         user_id: { type: Schema.Types.ObjectId, ref: 'User', required: true, unique: true },
         doctor_id: { type: Schema.Types.ObjectId, ref: 'Doctor' },
+        doctor_assigned_at: { type: Date },
+        doctor_assigned_by: { type: Schema.Types.ObjectId, ref: 'User' },
+        doctor_assignment_source: {
+            type: String,
+            enum: ['admin', 'assistant', 'invite', 'system']
+        },
+        care_status: {
+            type: String,
+            enum: ['needs_care', 'assigned', 'in_treatment', 'treated', 'inactive'],
+            default: 'needs_care',
+            required: true
+        },
+        illness_description: { type: String, maxlength: 2000 },
+        care_status_updated_at: { type: Date },
         onboarding_source: { type: String, enum: ['invite', 'self_register'], required: true },
         full_name: { type: String },
         date_of_birth: { type: Date },
@@ -94,6 +114,7 @@ const PatientSchema = new Schema<IPatient>(
 // Indexes
 PatientSchema.index({ user_id: 1 });
 PatientSchema.index({ doctor_id: 1 });
+PatientSchema.index({ care_status: 1, doctor_id: 1 });
 PatientSchema.index({ current_streak: -1 });
 
 export const Patient: Model<IPatient> = mongoose.models.Patient || mongoose.model<IPatient>('Patient', PatientSchema);

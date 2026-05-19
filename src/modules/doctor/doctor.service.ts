@@ -236,6 +236,7 @@ export class DoctorService {
                 assigned_doctor_ids: [Doctor._id],
                 permissions: {
                     can_view_assigned_patients: data.permissions?.can_view_assigned_patients ?? true,
+                    can_assign_patients: data.permissions?.can_assign_patients ?? false,
                     can_manage_bookings: data.permissions?.can_manage_bookings ?? true,
                     can_send_communications: data.permissions?.can_send_communications ?? true
                 }
@@ -279,6 +280,7 @@ export class DoctorService {
         if (data.permissions) {
             Assistant.permissions = {
                 can_view_assigned_patients: data.permissions.can_view_assigned_patients ?? Assistant.permissions.can_view_assigned_patients,
+                can_assign_patients: data.permissions.can_assign_patients ?? Assistant.permissions.can_assign_patients,
                 can_manage_bookings: data.permissions.can_manage_bookings ?? Assistant.permissions.can_manage_bookings,
                 can_send_communications: data.permissions.can_send_communications ?? Assistant.permissions.can_send_communications
             };

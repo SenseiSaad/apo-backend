@@ -16,8 +16,11 @@ import {
     AssistantDoctorParamSchema,
     createAssistantAccountSchema,
     createDoctorAccountSchema,
+    assignPatientDoctorSchema,
+    getAssignablePatientsQuerySchema,
     getActiveAssistantsQuerySchema,
     getActiveDoctorsQuerySchema,
+    patientIdParamSchema,
     setAssistantDoctorsSchema,
     doctorIdParamSchema,
     updateDoctorAccountSchema,
@@ -51,6 +54,18 @@ router.get('/dashboard/summary', adminController.getDashboardSummary.bind(adminC
 router.get('/avatar-settings', adminController.getAvatarSettings.bind(adminController));
 router.patch('/avatar-settings', validate(updateAvatarSettingsSchema), adminController.updateAvatarSettings.bind(adminController));
 router.get('/doctors/active', validate(getActiveDoctorsQuerySchema, 'query'), adminController.getActiveDoctors.bind(adminController));
+router.get('/patients/assignable', validate(getAssignablePatientsQuerySchema, 'query'), adminController.getAssignablePatients.bind(adminController));
+router.post(
+    '/patients/:patientId/assign-doctor',
+    validate(patientIdParamSchema, 'params'),
+    validate(assignPatientDoctorSchema),
+    adminController.assignPatientToDoctor.bind(adminController)
+);
+router.delete(
+    '/patients/:patientId/doctor',
+    validate(patientIdParamSchema, 'params'),
+    adminController.unassignPatientFromDoctor.bind(adminController)
+);
 router.post('/doctors', validate(createDoctorAccountSchema), adminController.createDoctorAccount.bind(adminController));
 router.get('/doctors/:doctorId', validate(doctorIdParamSchema, 'params'), adminController.getDoctorDetails.bind(adminController));
 router.patch(

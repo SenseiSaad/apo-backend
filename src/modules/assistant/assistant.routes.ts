@@ -6,6 +6,7 @@ import { Role } from '../../models/enums';
 import {
     AssistantBookingIdParamSchema,
     AssistantPatientIdParamSchema,
+    assignAssistantPatientDoctorSchema,
     sendAssistantPatientMessageSchema,
     updateAssistantBookingStatusSchema
 } from '../../validators/assistant.validator';
@@ -19,6 +20,12 @@ router.get('/me', assistantController.me.bind(assistantController));
 router.get('/doctors', assistantController.getDoctors.bind(assistantController));
 router.get('/patients', assistantController.getPatients.bind(assistantController));
 router.get('/patients/:patientId', validate(AssistantPatientIdParamSchema, 'params'), assistantController.getPatient.bind(assistantController));
+router.post(
+    '/patients/:patientId/assign-doctor',
+    validate(AssistantPatientIdParamSchema, 'params'),
+    validate(assignAssistantPatientDoctorSchema),
+    assistantController.assignPatientToDoctor.bind(assistantController)
+);
 router.post(
     '/patients/:patientId/message',
     validate(AssistantPatientIdParamSchema, 'params'),

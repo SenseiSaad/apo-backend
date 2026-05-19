@@ -3,6 +3,7 @@ import { Patient } from '../../models/Patient.model';
 import { SessionBooking } from '../../models/SessionBooking.model';
 import { User } from '../../models/User.model';
 import { Role, UserStatus } from '../../models/enums';
+import { patientAssignmentService } from '../../services/patientAssignment.service';
 import { AppError, ForbiddenError, NotFoundError, UnauthorizedError } from '../../utils/errors';
 
 export class AssistantService {
@@ -89,6 +90,22 @@ export class AssistantService {
         };
     }
 
+    async assignPatientToDoctor(userId: string, patientId: string, doctorId: string, force?: boolean) {
+        const { Assistant } = await this.getActiveAssistantContext(userId);
+        this.assertPermission(Assistant, 'can_assign_patients');
+
+        const result = await patientAssignmentService.assignPatientToDoctor({
+            patientId,
+            doctorId,
+            actorUserId: userId,
+            source: 'assistant',
+            force,
+            allowedDoctorIds: Assistant.assigned_doctor_ids.map((id: any) => id.toString())
+        });
+
+        return result;
+    }
+
     async getBookings(_userId: string) {
         // TODO: Replace this placeholder once the booking workflow has creation/ownership APIs.
         throw new AppError('Booking management is not implemented yet', 501);
@@ -139,7 +156,7 @@ export class AssistantService {
         return { user, Assistant };
     }
 
-    private assertPermission(Assistant: any, permission: 'can_view_assigned_patients' | 'can_manage_bookings' | 'can_send_communications') {
+    private assertPermission(Assistant: any, permission: 'can_view_assigned_patients' | 'can_assign_patients' | 'can_manage_bookings' | 'can_send_communications') {
         if (!Assistant.permissions?.[permission]) {
             throw new ForbiddenError('This Assistant account does not have permission for this action');
         }
@@ -182,6 +199,10 @@ export class AssistantService {
             tier: user?.tier,
             doctor_id: Doctor?._id?.toString() || patient.doctor_id?.toString(),
             Doctor_name: Doctor?.personal_info?.full_name || this.formatNameFromEmail(Doctor?.user_id?.email || ''),
+            care_status: patient.care_status,
+            illness_description: patient.illness_description,
+            care_status_updated_at: patient.care_status_updated_at,
+            doctor_assigned_at: patient.doctor_assigned_at,
             onboarding_source: patient.onboarding_source,
             activity_score: patient.activity_score,
             current_streak: patient.current_streak,

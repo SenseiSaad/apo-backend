@@ -48,11 +48,15 @@ app.use((req, res, next) => {
 });
 
 const allowedOrigins = [
+    'https://apothecary-frontend.vercel.app',
     'https://Apothecary-app-frontend.vercel.app',
+    process.env.CLIENT_URL,
+    process.env.PATIENT_APP_URL,
+    process.env.DOCTOR_PORTAL_URL,
     ...(process.env.ALLOWED_ORIGINS
         ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
         : []),
-];
+].filter((origin): origin is string => Boolean(origin));
 
 app.use(cors({
     origin: (origin, callback) => {

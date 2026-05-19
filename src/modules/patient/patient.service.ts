@@ -65,6 +65,9 @@ export class PatientService {
                 phone_number: patient.phone_number,
                 timezone: patient.timezone,
                 preferences: this.getPatientPreferences(patient.preferences),
+                care_status: patient.care_status,
+                illness_description: patient.illness_description,
+                care_status_updated_at: patient.care_status_updated_at,
                 onboarding_source: patient.onboarding_source,
                 activity_score: patient.activity_score,
                 current_streak: patient.current_streak,
@@ -96,6 +99,7 @@ export class PatientService {
         date_of_birth?: string;
         phone_number?: string;
         timezone?: string;
+        illness_description?: string;
         preferences?: {
             notifications_enabled?: boolean;
             email_notifications?: boolean;
@@ -124,6 +128,14 @@ export class PatientService {
             patient.timezone = data.timezone;
         }
 
+        if (data.illness_description !== undefined) {
+            patient.illness_description = data.illness_description;
+            if (patient.care_status === 'treated' || patient.care_status === 'inactive') {
+                patient.care_status = 'needs_care';
+            }
+            patient.care_status_updated_at = new Date();
+        }
+
         if (data.preferences !== undefined) {
             patient.preferences = {
                 ...this.toPlainObject(patient.preferences),
@@ -135,6 +147,32 @@ export class PatientService {
         await patient.save();
 
         logger.info(`Patient ${patient._id} profile updated`);
+
+        return this.getProfile(user_id);
+    }
+
+    async updateCareStatus(user_id: string, data: {
+        care_status: 'needs_care' | 'treated';
+        illness_description?: string;
+    }) {
+        const patient = await Patient.findOne({ user_id });
+        if (!patient) {
+            throw new NotFoundError('Patient profile not found');
+        }
+
+        patient.care_status = data.care_status;
+        patient.care_status_updated_at = new Date();
+
+        if (data.illness_description !== undefined) {
+            patient.illness_description = data.illness_description;
+        }
+
+        if (data.care_status === 'treated') {
+            patient.doctor_id = undefined;
+            patient.doctor_assigned_at = undefined;
+        }
+
+        await patient.save();
 
         return this.getProfile(user_id);
     }
@@ -375,6 +413,10 @@ export class PatientService {
         }
 
         patient.doctor_id = invite.doctor_id;
+        patient.doctor_assigned_at = new Date();
+        patient.doctor_assignment_source = 'invite';
+        patient.care_status = 'assigned';
+        patient.care_status_updated_at = new Date();
         patient.onboarding_source = 'invite';
         await patient.save();
 

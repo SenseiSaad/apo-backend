@@ -6,6 +6,7 @@ export const updateProfileSchema = z.object({
     date_of_birth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD').optional(),
     phone_number: z.string().trim().min(7).max(30).optional(),
     timezone: z.string().trim().min(2).max(80).optional(),
+    illness_description: z.string().trim().max(2000).optional(),
     preferences: z.object({
         notifications_enabled: z.boolean().optional(),
         email_notifications: z.boolean().optional(),
@@ -22,6 +23,11 @@ export const assignAvatarSchema = z.object({
     gender: z.enum(['girl', 'boy', 'female', 'male'])
 });
 
+export const updateCareStatusSchema = z.object({
+    care_status: z.enum(['needs_care', 'treated']),
+    illness_description: z.string().trim().max(2000).optional()
+});
+
 // Doctor request form (for free users)
 export const DoctorRequestSchema = z.object({
     reason: z.string().min(10, 'Please provide at least 10 characters'),
@@ -35,6 +41,7 @@ export const patientInviteIdParamSchema = z.object({
 });
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type UpdateCareStatusInput = z.infer<typeof updateCareStatusSchema>;
 export type AssignAvatarInput = z.infer<typeof assignAvatarSchema>;
 export type DoctorRequestInput = z.infer<typeof DoctorRequestSchema>;
 export type PatientInviteIdParamInput = z.infer<typeof patientInviteIdParamSchema>;

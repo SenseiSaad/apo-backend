@@ -11,7 +11,8 @@ export const registerSchema = z.object({
         .regex(/[0-9]/, 'Password must contain at least one number')
         .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
     role: z.nativeEnum(Role),
-    invite_token: z.string().optional()
+    invite_token: z.string().optional(),
+    illness_description: z.string().trim().max(2000).optional()
 });
 
 // Login validation

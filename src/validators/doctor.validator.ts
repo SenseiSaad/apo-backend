@@ -57,6 +57,7 @@ export const invitePatientSchema = z.object({
 
 const AssistantPermissionsSchema = z.object({
     can_view_assigned_patients: z.boolean().optional(),
+    can_assign_patients: z.boolean().optional(),
     can_manage_bookings: z.boolean().optional(),
     can_send_communications: z.boolean().optional()
 });
