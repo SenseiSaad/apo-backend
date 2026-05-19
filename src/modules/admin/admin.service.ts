@@ -393,7 +393,7 @@ export class AdminService {
             const setupToken = await this.createAssistantSetupToken(user._id);
             const otp = await this.createEmailOtp(user._id, user.email);
             const setupUrl = this.buildAssistantSetupUrl(setupToken);
-            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp);
+            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp, user.role);
 
             return {
                 message: 'Doctor account created. Setup link and OTP sent to Doctor email.',
@@ -671,7 +671,7 @@ export class AdminService {
         await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp, user.role);
 
         return {
-            message: 'Setup link and OTP sent to Assistant email',
+            message: 'Setup link and OTP sent to Doctor email',
             email: user.email,
             otp_expires_in: '10 minutes'
         };
@@ -730,7 +730,7 @@ export class AdminService {
             const setupToken = await this.createAssistantSetupToken(user._id);
             const otp = await this.createEmailOtp(user._id, user.email);
             const setupUrl = this.buildAssistantSetupUrl(setupToken);
-            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp);
+            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp, user.role);
 
             return {
                 message: 'Assistant account created. Setup link and OTP sent to Assistant email.',

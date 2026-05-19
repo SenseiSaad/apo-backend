@@ -280,7 +280,7 @@ export class DoctorService {
             const setupToken = await adminService.createAssistantSetupToken(user._id);
             const otp = await adminService.createEmailOtp(user._id, user.email);
             const setupUrl = adminService.buildAssistantSetupUrl(setupToken);
-            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp);
+            await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp, user.role);
 
             return {
                 message: 'Assistant invited and assigned. Setup link and OTP sent to Assistant email.',
@@ -384,7 +384,7 @@ export class DoctorService {
     }
 
     private buildPatientInviteUrl(token: string) {
-        const baseUrl = process.env.PATIENT_APP_URL || process.env.CLIENT_URL || process.env.APP_URL || 'https://Apothecary-app-frontend.vercel.app';
+        const baseUrl = process.env.PATIENT_APP_URL || process.env.CLIENT_URL || process.env.APP_URL || 'https://apothecary-frontend.vercel.app';
         return `${baseUrl.replace(/\/+$/, '')}/auth/invite?token=${encodeURIComponent(token)}`;
     }
 
