@@ -3,9 +3,12 @@ import { AuthRequest } from '../../types/express';
 import { assistantService } from './assistant.service';
 import {
     AssistantBookingIdParamInput,
+    AssistantCareRequestIdParamInput,
+    AssistantCareRequestsQueryInput,
     AssistantPatientIdParamInput,
     AssignAssistantPatientDoctorInput,
     SendAssistantPatientMessageInput,
+    UpdateAssistantCareRequestTriageInput,
     UpdateAssistantBookingStatusInput
 } from '../../validators/assistant.validator';
 
@@ -53,6 +56,32 @@ export class AssistantController {
     ): Promise<void> {
         try {
             const result = await assistantService.assignPatientToDoctor(req.user!.user_id, req.params.patientId, req.body.doctor_id, req.body.force);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getCareRequests(
+        req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, AssistantCareRequestsQueryInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.getCareRequests(req.user!.user_id, req.query);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updateCareRequestTriage(
+        req: AuthRequest<AssistantCareRequestIdParamInput, Record<string, never>, UpdateAssistantCareRequestTriageInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.updateCareRequestTriage(req.user!.user_id, req.params.careRequestId, req.body);
             res.json({ success: true, data: result });
         } catch (error) {
             next(error);

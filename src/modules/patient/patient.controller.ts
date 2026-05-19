@@ -4,6 +4,7 @@ import { patientService } from './patient.service';
 import {
     UpdateProfileInput,
     UpdateCareStatusInput,
+    CreateCareRequestInput,
     AssignAvatarInput,
     DoctorRequestInput,
     PatientInviteIdParamInput
@@ -74,6 +75,51 @@ export class PatientController {
                 success: true,
                 data: result
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async createCareRequest(req: AuthRequest<Record<string, never>, Record<string, never>, CreateCareRequestInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const user_id = req.user?.user_id;
+            if (!user_id) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await patientService.createCareRequest(user_id, req.body);
+            res.status(201).json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getCareRequests(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const user_id = req.user?.user_id;
+            if (!user_id) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await patientService.getCareRequests(user_id);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async requestCareClosure(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const user_id = req.user?.user_id;
+            if (!user_id) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await patientService.requestCareClosure(user_id);
+            res.json({ success: true, data: result });
         } catch (error) {
             next(error);
         }

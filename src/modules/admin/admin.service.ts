@@ -657,18 +657,18 @@ export class AdminService {
         }
 
         if (user.status === UserStatus.BLOCKED || user.status === UserStatus.SUSPENDED || user.status === UserStatus.DEACTIVATED) {
-            throw new BadRequestError('Cannot resend setup invite to a blocked or inactive Assistant');
+            throw new BadRequestError('Cannot resend setup invite to a blocked or inactive Doctor');
         }
 
         if (!user.must_change_password && user.email_verified && user.status === UserStatus.ACTIVE) {
-            throw new BadRequestError('This Assistant has already completed setup');
+            throw new BadRequestError('This Doctor has already completed setup');
         }
 
         const setupToken = await this.createAssistantSetupToken(user._id);
         const otp = await this.createEmailOtp(user._id, user.email);
         const setupUrl = this.buildAssistantSetupUrl(setupToken);
 
-        await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp);
+        await emailService.sendDoctorSetupInvite(user.email, setupUrl, otp, user.role);
 
         return {
             message: 'Setup link and OTP sent to Assistant email',
@@ -953,7 +953,7 @@ export class AdminService {
             email: user.email,
             role: user.role,
             status: user.status,
-            message: 'Valid Assistant setup link'
+            message: 'Valid setup link'
         };
     }
 
@@ -962,10 +962,10 @@ export class AdminService {
         const user = setup.user_id as any;
         const otp = await this.createEmailOtp(user._id, user.email);
 
-        await emailService.sendDoctorSetupInvite(user.email, this.buildAssistantSetupUrl(token), otp);
+        await emailService.sendDoctorSetupInvite(user.email, this.buildAssistantSetupUrl(token), otp, user.role);
 
         return {
-            message: 'Setup OTP sent to Assistant email',
+            message: `Setup OTP sent to ${user.role === Role.DOCTOR ? 'Doctor' : 'Assistant'} email`,
             otp_expires_in: '10 minutes'
         };
     }
@@ -990,7 +990,7 @@ export class AdminService {
         await setup.save();
 
         return {
-            message: 'Assistant password set successfully. You can now sign in.',
+            message: `${user.role === Role.DOCTOR ? 'Doctor' : 'Assistant'} password set successfully. You can now sign in.`,
             email: user.email,
             status: user.status
         };
@@ -1065,7 +1065,7 @@ export class AdminService {
     }
 
     public buildAssistantSetupUrl(token: string) {
-        const baseUrl = process.env.Doctor_PORTAL_URL || process.env.CLIENT_URL || 'https://Apothecary-app-frontend.vercel.app';
+        const baseUrl = process.env.DOCTOR_PORTAL_URL || process.env.CLIENT_URL || 'https://apothecary-frontend.vercel.app';
         return `${baseUrl.replace(/\/+$/, '')}/auth/assistant-setup?token=${encodeURIComponent(token)}`;
     }
 
@@ -1081,16 +1081,16 @@ export class AdminService {
         }
 
         const user = setup.user_id as any;
-        if (!user || user.role !== Role.ASSISTANT) {
-            throw new BadRequestError('Invalid Assistant setup link');
+        if (!user || (user.role !== Role.ASSISTANT && user.role !== Role.DOCTOR)) {
+            throw new BadRequestError('Invalid setup link');
         }
 
         if (user.status === UserStatus.BLOCKED || user.status === UserStatus.SUSPENDED || user.status === UserStatus.DEACTIVATED) {
-            throw new UnauthorizedError('This Assistant account is not allowed to complete setup');
+            throw new UnauthorizedError('This account is not allowed to complete setup');
         }
 
         if (!user.must_change_password && user.email_verified && user.status === UserStatus.ACTIVE) {
-            throw new BadRequestError('This Assistant account has already been set up');
+            throw new BadRequestError('This account has already been set up');
         }
 
         return setup;

@@ -3,8 +3,10 @@ import { AuthRequest } from '../../types/express';
 import { doctorService } from './doctor.service';
 import {
     CreateDoctorAssistantInput,
+    CompleteTreatmentInput,
     InvitePatientInput,
     DoctorAssistantIdParamInput,
+    DoctorPatientIdParamInput,
     UpdateDoctorAssistantInput,
     UpdateDoctorAvailabilityInput,
     UpdateDoctorPersonalInfoInput,
@@ -90,6 +92,28 @@ export class DoctorController {
     async getPatientInvites(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await doctorService.getPatientInvites(req.user!.user_id);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getPatients(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await doctorService.getPatients(req.user!.user_id);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async completeTreatment(
+        req: AuthRequest<DoctorPatientIdParamInput, Record<string, never>, CompleteTreatmentInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await doctorService.completeTreatment(req.user!.user_id, req.params.patientId, req.body);
             res.json({ success: true, data: result });
         } catch (error) {
             next(error);

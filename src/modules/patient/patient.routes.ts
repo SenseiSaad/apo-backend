@@ -6,6 +6,7 @@ import { Role } from '../../models/enums';
 import {
     updateProfileSchema,
     updateCareStatusSchema,
+    createCareRequestSchema,
     assignAvatarSchema,
     DoctorRequestSchema,
     patientInviteIdParamSchema
@@ -21,6 +22,9 @@ router.use(requireRole([Role.PATIENT]));
 router.get('/profile', patientController.getProfile.bind(patientController));
 router.patch('/profile', validate(updateProfileSchema), patientController.updateProfile.bind(patientController));
 router.patch('/care-status', validate(updateCareStatusSchema), patientController.updateCareStatus.bind(patientController));
+router.get('/care-requests', patientController.getCareRequests.bind(patientController));
+router.post('/care-requests', validate(createCareRequestSchema), patientController.createCareRequest.bind(patientController));
+router.post('/care-requests/request-closure', patientController.requestCareClosure.bind(patientController));
 
 // Avatar
 router.post('/avatar/assign', validate(assignAvatarSchema), patientController.assignAvatar.bind(patientController));

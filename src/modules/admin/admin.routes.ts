@@ -17,7 +17,10 @@ import {
     createAssistantAccountSchema,
     createDoctorAccountSchema,
     assignPatientDoctorSchema,
+    careRequestIdParamSchema,
     getAssignablePatientsQuerySchema,
+    getCareRequestsQuerySchema,
+    getPatientsQuerySchema,
     getActiveAssistantsQuerySchema,
     getActiveDoctorsQuerySchema,
     patientIdParamSchema,
@@ -25,6 +28,7 @@ import {
     doctorIdParamSchema,
     updateDoctorAccountSchema,
     updateAssistantSchema,
+    updateCareRequestTriageSchema,
     updateDoctorCredentialsSchema
 } from '../../validators/admin.validator';
 import { updateAvatarSettingsSchema } from '../../validators/avatarSettings.validator';
@@ -54,7 +58,16 @@ router.get('/dashboard/summary', adminController.getDashboardSummary.bind(adminC
 router.get('/avatar-settings', adminController.getAvatarSettings.bind(adminController));
 router.patch('/avatar-settings', validate(updateAvatarSettingsSchema), adminController.updateAvatarSettings.bind(adminController));
 router.get('/doctors/active', validate(getActiveDoctorsQuerySchema, 'query'), adminController.getActiveDoctors.bind(adminController));
+router.get('/patients/stats', adminController.getPatientManagementStats.bind(adminController));
+router.get('/patients', validate(getPatientsQuerySchema, 'query'), adminController.getPatients.bind(adminController));
 router.get('/patients/assignable', validate(getAssignablePatientsQuerySchema, 'query'), adminController.getAssignablePatients.bind(adminController));
+router.get('/care-requests', validate(getCareRequestsQuerySchema, 'query'), adminController.getCareRequests.bind(adminController));
+router.patch(
+    '/care-requests/:careRequestId/triage',
+    validate(careRequestIdParamSchema, 'params'),
+    validate(updateCareRequestTriageSchema),
+    adminController.updateCareRequestTriage.bind(adminController)
+);
 router.post(
     '/patients/:patientId/assign-doctor',
     validate(patientIdParamSchema, 'params'),

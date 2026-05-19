@@ -15,6 +15,7 @@ import { generateTokenPair, verifyRefreshToken } from '../../utils/jwt';
 import { encrypt, decrypt } from '../../utils/encryption';
 import { redisService } from '../../services/redis.service';
 import { emailService } from '../../services/email.service';
+import { careRequestService } from '../../services/careRequest.service';
 import { BadRequestError, UnauthorizedError, NotFoundError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 
@@ -108,6 +109,13 @@ export class AuthService {
                 chat_tokens_used_today: 0,
                 content_views_today: 0
             });
+
+            if (data.illness_description?.trim()) {
+                await careRequestService.createForPatient(user._id.toString(), {
+                    reason: data.illness_description.trim(),
+                    source: 'signup'
+                });
+            }
         } else if (data.role === Role.DOCTOR) {
             await DoctorModel.create({
                 user_id: user._id,

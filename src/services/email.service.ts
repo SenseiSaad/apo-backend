@@ -160,12 +160,14 @@ class EmailService {
         return this.sendEmail(email, subject, html, password);
     }
 
-    async sendDoctorSetupInvite(email: string, setupUrl: string, otp: string) {
-        const subject = 'Set Up Your Apothecary Assistant Account';
+    async sendDoctorSetupInvite(email: string, setupUrl: string, otp: string, role?: string) {
+        const isDoctor = role === 'doctor';
+        const roleLabel = isDoctor ? 'Doctor' : 'Assistant';
+        const subject = `Set Up Your Apothecary ${roleLabel} Account`;
         const html = `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #4F46E5;">Apothecary Assistant Portal</h2>
-                <p>Your Assistant account has been created by the Apothecary Super Admin.</p>
+                <h2 style="color: #4F46E5;">Apothecary ${roleLabel} Portal</h2>
+                <p>Your ${roleLabel} account has been created by the Apothecary Super Admin.</p>
                 <p>Use the secure link below and the verification code to set your password.</p>
 
                 <div style="text-align: center; margin: 30px 0;">

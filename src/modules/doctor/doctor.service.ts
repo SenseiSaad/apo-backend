@@ -10,6 +10,7 @@ import { Role, Tier, UserStatus } from '../../models/enums';
 import { decrypt, encrypt } from '../../utils/encryption';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { emailService } from '../../services/email.service';
+import { careRequestService } from '../../services/careRequest.service';
 import { adminService } from '../admin/admin.service';
 import {
     CreateDoctorAssistantInput,
@@ -178,6 +179,40 @@ export class DoctorService {
             invites: invites.map(invite => this.formatInvite(invite)),
             total: invites.length
         };
+    }
+
+    async getPatients(user_id: string) {
+        const Doctor = await this.findDoctor(user_id);
+        const patients = await Patient.find({ doctor_id: Doctor._id })
+            .populate('user_id', 'email role status tier created_at')
+            .sort({ updated_at: -1 })
+            .limit(300);
+
+        return {
+            patients: patients.map((patient: any) => {
+                const user = patient.user_id;
+                return {
+                    patient_id: patient._id.toString(),
+                    email: user?.email,
+                    name: patient.full_name || this.formatNameFromEmail(user?.email || ''),
+                    status: user?.status,
+                    tier: user?.tier,
+                    care_status: patient.care_status,
+                    illness_description: patient.illness_description,
+                    doctor_assigned_at: patient.doctor_assigned_at,
+                    created_at: patient.created_at,
+                    updated_at: patient.updated_at
+                };
+            }),
+            total: patients.length
+        };
+    }
+
+    async completeTreatment(user_id: string, patientId: string, data: {
+        outcome: 'completed' | 'follow_up_needed' | 'referred_out' | 'not_appropriate_for_platform';
+        doctor_notes?: string;
+    }) {
+        return careRequestService.completeByDoctor(user_id, patientId, data);
     }
 
     async getAssistants(user_id: string) {
@@ -369,6 +404,10 @@ export class DoctorService {
             created_at: invite.created_at,
             is_expired: !invite.used_at && !invite.declined_at && invite.expires_at <= now
         };
+    }
+
+    private formatNameFromEmail(email: string) {
+        return email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, char => char.toUpperCase()) || 'User';
     }
 
     private formatProfile(user: any, Doctor: any) {

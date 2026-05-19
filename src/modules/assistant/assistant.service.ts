@@ -4,6 +4,7 @@ import { SessionBooking } from '../../models/SessionBooking.model';
 import { User } from '../../models/User.model';
 import { Role, UserStatus } from '../../models/enums';
 import { patientAssignmentService } from '../../services/patientAssignment.service';
+import { careRequestService } from '../../services/careRequest.service';
 import { AppError, ForbiddenError, NotFoundError, UnauthorizedError } from '../../utils/errors';
 
 export class AssistantService {
@@ -104,6 +105,24 @@ export class AssistantService {
         });
 
         return result;
+    }
+
+    async getCareRequests(userId: string, query: {
+        page: number;
+        limit: number;
+        search?: string;
+        status?: any;
+    }) {
+        const allowedDoctorIds = await careRequestService.assertAssistantCanTriage(userId);
+        return careRequestService.listRequests(query, allowedDoctorIds);
+    }
+
+    async updateCareRequestTriage(userId: string, careRequestId: string, data: {
+        status?: 'triage_in_progress' | 'pending_assignment' | 'cancelled';
+        triage_notes?: string;
+    }) {
+        await careRequestService.assertAssistantCanTriage(userId);
+        return careRequestService.updateTriage(careRequestId, userId, data);
     }
 
     async getBookings(_userId: string) {

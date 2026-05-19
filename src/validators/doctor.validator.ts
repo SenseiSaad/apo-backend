@@ -73,6 +73,15 @@ export const DoctorAssistantIdParamSchema = z.object({
     assistantId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Assistant ID')
 });
 
+export const DoctorPatientIdParamSchema = z.object({
+    patientId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID')
+});
+
+export const completeTreatmentSchema = z.object({
+    outcome: z.enum(['completed', 'follow_up_needed', 'referred_out', 'not_appropriate_for_platform']),
+    doctor_notes: z.string().trim().max(4000).optional()
+});
+
 export const updateDoctorAssistantSchema = z.object({
     permissions: AssistantPermissionsSchema.optional(),
     status: z.enum(['active', 'blocked', 'suspended', 'deactivated']).optional()
@@ -88,4 +97,6 @@ export type UpdateDoctorSettingsInput = z.infer<typeof updateDoctorSettingsSchem
 export type InvitePatientInput = z.infer<typeof invitePatientSchema>;
 export type CreateDoctorAssistantInput = z.infer<typeof createDoctorAssistantSchema>;
 export type DoctorAssistantIdParamInput = z.infer<typeof DoctorAssistantIdParamSchema>;
+export type DoctorPatientIdParamInput = z.infer<typeof DoctorPatientIdParamSchema>;
+export type CompleteTreatmentInput = z.infer<typeof completeTreatmentSchema>;
 export type UpdateDoctorAssistantInput = z.infer<typeof updateDoctorAssistantSchema>;

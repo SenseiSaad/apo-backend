@@ -9,6 +9,7 @@ import { InviteToken } from '../../models/InviteToken.model';
 import { decrypt } from '../../utils/encryption';
 import { redisService } from '../../services/redis.service';
 import { avatarService } from '../../services/avatar.service';
+import { careRequestService } from '../../services/careRequest.service';
 import { NotFoundError, BadRequestError, ForbiddenError, ConflictError } from '../../utils/errors';
 import { Tier } from '../../models/enums';
 import { logger } from '../../utils/logger';
@@ -160,21 +161,47 @@ export class PatientService {
             throw new NotFoundError('Patient profile not found');
         }
 
-        patient.care_status = data.care_status;
-        patient.care_status_updated_at = new Date();
-
-        if (data.illness_description !== undefined) {
-            patient.illness_description = data.illness_description;
+        if (data.care_status === 'needs_care') {
+            await careRequestService.createForPatient(user_id, {
+                reason: data.illness_description || patient.illness_description || 'Patient requested treatment',
+                source: 'patient'
+            });
+        } else {
+            await careRequestService.requestClosure(user_id);
         }
-
-        if (data.care_status === 'treated') {
-            patient.doctor_id = undefined;
-            patient.doctor_assigned_at = undefined;
-        }
-
-        await patient.save();
 
         return this.getProfile(user_id);
+    }
+
+    async createCareRequest(user_id: string, data: {
+        reason: string;
+        urgency?: 'low' | 'normal' | 'high';
+        preferred_specialty?: string;
+        preferred_doctor_gender?: 'male' | 'female' | 'any';
+        availability?: string;
+        patient_notes?: string;
+    }) {
+        return careRequestService.createForPatient(user_id, {
+            ...data,
+            source: 'patient'
+        });
+    }
+
+    async getCareRequests(user_id: string) {
+        const patient = await Patient.findOne({ user_id });
+        if (!patient) {
+            throw new NotFoundError('Patient profile not found');
+        }
+
+        return careRequestService.listRequests({
+            page: 1,
+            limit: 100,
+            patient_id: patient._id.toString()
+        });
+    }
+
+    async requestCareClosure(user_id: string) {
+        return careRequestService.requestClosure(user_id);
     }
 
     async assignAvatar(user_id: string, gender: string) {

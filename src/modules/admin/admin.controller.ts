@@ -3,6 +3,7 @@ import { AuthRequest } from '../../types/express';
 import { adminService } from './admin.service';
 import { avatarSettingsService } from '../../services/avatarSettings.service';
 import { patientAssignmentService } from '../../services/patientAssignment.service';
+import { careRequestService } from '../../services/careRequest.service';
 import {
     AdminForgotPasswordInput,
     AdminResendSignupOtpInput,
@@ -20,6 +21,10 @@ import {
     GetActiveDoctorsQueryInput,
     GetAssignablePatientsQueryInput,
     AssignPatientDoctorInput,
+    CareRequestIdParamInput,
+    GetCareRequestsQueryInput,
+    GetPatientsQueryInput,
+    UpdateCareRequestTriageInput,
     SetAssistantDoctorsInput,
     PatientIdParamInput,
     doctorIdParamInput,
@@ -242,6 +247,52 @@ export class AdminController {
                 success: true,
                 data: result
             });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getPatientManagementStats(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await careRequestService.getStats();
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getPatients(req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, GetPatientsQueryInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await careRequestService.listPatients(req.query);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getCareRequests(req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, GetCareRequestsQueryInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await careRequestService.listRequests(req.query);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async updateCareRequestTriage(
+        req: AuthRequest<CareRequestIdParamInput, Record<string, never>, UpdateCareRequestTriageInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const adminUserId = req.user?.user_id;
+            if (!adminUserId) {
+                res.status(401).json({ success: false, message: 'Unauthorized' });
+                return;
+            }
+
+            const result = await careRequestService.updateTriage(req.params.careRequestId, adminUserId, req.body);
+            res.json({ success: true, data: result });
         } catch (error) {
             next(error);
         }

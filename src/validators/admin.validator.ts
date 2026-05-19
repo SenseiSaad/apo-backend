@@ -170,6 +170,70 @@ export const assignPatientDoctorSchema = z.object({
     force: z.boolean().optional().default(false)
 });
 
+export const careRequestIdParamSchema = z.object({
+    careRequestId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid care request ID')
+});
+
+export const getCareRequestsQuerySchema = z.object({
+    page: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).optional().default(1)
+    ),
+    limit: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).max(500).optional().default(20)
+    ),
+    search: z.string().trim().min(1).max(100).optional(),
+    status: z.enum([
+        'open',
+        'closed',
+        'new_request',
+        'triage_in_progress',
+        'pending_assignment',
+        'assigned',
+        'in_treatment',
+        'follow_up_needed',
+        'patient_requested_closure',
+        'completed',
+        'closed_by_patient',
+        'cancelled',
+        'referred_out',
+        'not_appropriate_for_platform'
+    ]).optional(),
+    doctor_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Doctor ID').optional(),
+    patient_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID').optional()
+});
+
+export const getPatientsQuerySchema = z.object({
+    page: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).optional().default(1)
+    ),
+    limit: z.preprocess(
+        value => value === undefined ? undefined : Number(value),
+        z.number().int().min(1).max(500).optional().default(20)
+    ),
+    search: z.string().trim().min(1).max(100).optional(),
+    care_status: z.enum(['all', 'needs_care', 'assigned', 'in_treatment', 'treated', 'inactive']).optional().default('all'),
+    assigned: z.preprocess(
+        value => {
+            if (value === undefined || value === 'all') {
+                return undefined;
+            }
+            return value === true || value === 'true';
+        },
+        z.boolean().optional()
+    )
+});
+
+export const updateCareRequestTriageSchema = z.object({
+    status: z.enum(['triage_in_progress', 'pending_assignment', 'cancelled']).optional(),
+    triage_notes: z.string().trim().max(4000).optional()
+}).refine(
+    data => Object.keys(data).length > 0,
+    { message: 'At least one triage field is required' }
+);
+
 export const AssistantSetupTokenSchema = z.object({
     token: z.string().min(32, 'Setup token is required')
 });
@@ -200,5 +264,9 @@ export type AssistantDoctorParamInput = z.infer<typeof AssistantDoctorParamSchem
 export type PatientIdParamInput = z.infer<typeof patientIdParamSchema>;
 export type GetAssignablePatientsQueryInput = z.infer<typeof getAssignablePatientsQuerySchema>;
 export type AssignPatientDoctorInput = z.infer<typeof assignPatientDoctorSchema>;
+export type CareRequestIdParamInput = z.infer<typeof careRequestIdParamSchema>;
+export type GetCareRequestsQueryInput = z.infer<typeof getCareRequestsQuerySchema>;
+export type GetPatientsQueryInput = z.infer<typeof getPatientsQuerySchema>;
+export type UpdateCareRequestTriageInput = z.infer<typeof updateCareRequestTriageSchema>;
 export type AssistantSetupTokenInput = z.infer<typeof AssistantSetupTokenSchema>;
 export type CompleteAssistantSetupInput = z.infer<typeof completeAssistantSetupSchema>;

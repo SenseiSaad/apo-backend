@@ -28,6 +28,15 @@ export const updateCareStatusSchema = z.object({
     illness_description: z.string().trim().max(2000).optional()
 });
 
+export const createCareRequestSchema = z.object({
+    reason: z.string().trim().min(5, 'Please describe what you need help with').max(2000),
+    urgency: z.enum(['low', 'normal', 'high']).optional().default('normal'),
+    preferred_specialty: z.string().trim().max(120).optional(),
+    preferred_doctor_gender: z.enum(['male', 'female', 'any']).optional(),
+    availability: z.string().trim().max(1000).optional(),
+    patient_notes: z.string().trim().max(2000).optional()
+});
+
 // Doctor request form (for free users)
 export const DoctorRequestSchema = z.object({
     reason: z.string().min(10, 'Please provide at least 10 characters'),
@@ -42,6 +51,7 @@ export const patientInviteIdParamSchema = z.object({
 
 export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
 export type UpdateCareStatusInput = z.infer<typeof updateCareStatusSchema>;
+export type CreateCareRequestInput = z.infer<typeof createCareRequestSchema>;
 export type AssignAvatarInput = z.infer<typeof assignAvatarSchema>;
 export type DoctorRequestInput = z.infer<typeof DoctorRequestSchema>;
 export type PatientInviteIdParamInput = z.infer<typeof patientInviteIdParamSchema>;
