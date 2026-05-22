@@ -13,6 +13,7 @@ router.use(requireRole([Role.PATIENT]));
 
 // Send message (AI chat)
 router.post('/message', validate(sendMessageSchema), chatController.sendMessage.bind(chatController));
+router.post('/message/stream', validate(sendMessageSchema), chatController.streamMessage.bind(chatController));
 
 // Get chat history
 router.get('/history', chatController.getChatHistory.bind(chatController));

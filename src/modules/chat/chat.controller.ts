@@ -7,6 +7,31 @@ import {
 
 export class ChatController {
     /**
+     * POST /chat/message/stream
+     */
+    async streamMessage(req: AuthRequest<Record<string, never>, Record<string, never>, SendMessageInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const user_id = req.user?.user_id;
+            if (!user_id) {
+                res.status(401).json({
+                    success: false,
+                    message: 'Unauthorized'
+                });
+                return;
+            }
+
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+            res.setHeader('X-Accel-Buffering', 'no');
+
+            await chatService.streamMessage(user_id, req.body, res);
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    /**
      * POST /chat/message
      */
     async sendMessage(req: AuthRequest<Record<string, never>, Record<string, never>, SendMessageInput>, res: Response, next: NextFunction): Promise<void> {

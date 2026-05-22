@@ -1,9 +1,20 @@
-interface ChatMessage {
-    role: 'user' | 'assistant';
+import Groq from 'groq-sdk';
+import { execFile, spawn, ChildProcess } from 'child_process';
+import { EventEmitter } from 'events';
+import crypto from 'crypto';
+import util from 'util';
+import path from 'path';
+import { logger } from '../utils/logger';
+import { avatarViewerService } from '../modules/avatarViewer/avatarViewer.service';
+
+const execFilePromise = util.promisify(execFile);
+
+export interface ChatMessage {
+    role: 'user' | 'assistant' | 'system';
     content: string;
 }
 
-interface AIResponse {
+export interface AIResponse {
     text: string;
     token_count: number;
     is_crisis: boolean;
@@ -15,199 +26,287 @@ export class AIService {
         'self harm', 'hurt myself', 'no reason to live'
     ];
 
-    /**
-     * Get AI response (Mock for development)
-     * In production, this will call Claude API
-     */
-    async getChatResponse(
-        message: string,
-        _conversation_history: ChatMessage[] = [],
-        _patient_context?: any
-    ): Promise<AIResponse> {
-        // Check for crisis keywords
-        const is_crisis = this.detectCrisis(message);
+    private groq: Groq | null = null;
+    private faissProcess: ChildProcess | null = null;
+    private faissEmitter = new EventEmitter();
+    private faissReady = false;
 
-        // Mock response based on development mode
-        if (process.env.NODE_ENV === 'development') {
-            return this.getMockResponse(message, is_crisis);
+    constructor() {
+        if (process.env.GROQ_API_KEY) {
+            this.groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+        } else {
+            logger.warn('GROQ_API_KEY is not set. AI Service will use mock responses.');
+        }
+        
+        this.initFaissDaemon();
+    }
+
+    private initFaissDaemon() {
+        const scriptPath = path.join(__dirname, '../../scripts/query_faiss.py');
+        this.faissProcess = spawn('python', [scriptPath, '--daemon']);
+        
+        let buffer = '';
+
+        this.faissProcess.stdout?.on('data', (data) => {
+            buffer += data.toString();
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+                if (!line.trim()) continue;
+                try {
+                    const result = JSON.parse(line);
+                    if (result.status === 'ready') {
+                        this.faissReady = true;
+                        this.faissEmitter.emit('ready');
+                    } else if (result.id) {
+                        this.faissEmitter.emit(`response_${result.id}`, result);
+                    }
+                } catch (e) {
+                    logger.warn(`FAISS unparseable stdout: ${line}`);
+                }
+            }
+        });
+
+        this.faissProcess.stderr?.on('data', (data) => {
+            const err = data.toString();
+            if (!err.includes('huggingface')) {
+                logger.warn(`FAISS stderr: ${err}`);
+            }
+        });
+
+        this.faissProcess.on('exit', (code) => {
+            logger.error(`FAISS daemon exited with code ${code}. Restarting...`);
+            this.faissReady = false;
+            setTimeout(() => this.initFaissDaemon(), 5000);
+        });
+    }
+
+    private async queryFaiss(query: string): Promise<string> {
+        if (!this.faissProcess) {
+            return '';
         }
 
-        // TODO: Implement real Claude API call
-        // return await this.getClaudeResponse(message, conversation_history, patient_context);
-        
-        return this.getMockResponse(message, is_crisis);
-    } 
+        // Wait for ready if not ready
+        if (!this.faissReady) {
+            await new Promise(resolve => this.faissEmitter.once('ready', resolve));
+        }
 
-    /**
-     * Detect crisis keywords in message
-     */
+        const id = crypto.randomUUID();
+        return new Promise((resolve) => {
+            const timeout = setTimeout(() => {
+                this.faissEmitter.removeAllListeners(`response_${id}`);
+                logger.warn('FAISS query timed out');
+                resolve('');
+            }, 15000);
+
+            this.faissEmitter.once(`response_${id}`, (result) => {
+                clearTimeout(timeout);
+                if (result.success && result.data && result.data.length > 0) {
+                    const formattedDocs = result.data.map((doc: any) => {
+                        const page = doc.metadata?.page !== undefined ? doc.metadata.page + 1 : 'Unknown';
+                        const source = doc.metadata?.source ? path.basename(doc.metadata.source) : 'Document';
+                        return `[Source: ${source}, Page: ${page}]\n${doc.content}`;
+                    });
+                    resolve(formattedDocs.join('\n\n'));
+                } else {
+                    if (result.error) logger.warn(`FAISS query error: ${result.error}`);
+                    resolve('');
+                }
+            });
+
+            this.faissProcess?.stdin?.write(JSON.stringify({ id, query }) + '\n');
+        });
+    }
+
+    private buildSystemPrompt(contextData: string, patient_context?: any): string {
+        return `You are a compassionate Clinical assistant for the Thinkwell Plus / Apothecary platform.
+
+Patient reference: ${patient_context?.patient_id || 'unknown'}
+
+CLINICAL REFERENCE KNOWLEDGE:
+${contextData ? contextData : 'No specific clinical references found for this query.'}
+
+Guidelines:
+- STRICTLY restrict your responses to mental wellness, therapy, coping mechanisms, self-care, and platform support. If the user asks about unrelated topics (e.g., programming, cooking, maths, general trivia, unrelated advice), you MUST politely refuse to answer and redirect them to discuss their mental health or well-being.
+- Warm, non-judgmental, evidence-based tone.
+- Always recommend consulting their Doctor for clinical decisions.
+- Do not make clinical diagnoses.
+- Focus on supportive listening and gentle guidance.
+
+AVATAR CONTROL INSTRUCTIONS:
+You must prepend your response with an <expression> and <animation> tag to control the 3D avatar.
+Valid expressions: calm, content, joyful, neutral, happy, sad, angry, fear, disgust, love
+Valid animations: m_idle_01, m_talk_01, m_talk_02, f_idle_01, f_talk_01, f_talk_02 (use talk for speaking, idle for resting).
+
+Format exactly like this:
+<expression>happy</expression><animation>f_talk_01</animation>Hello! How can I help you today?`;
+    }
+
     private detectCrisis(message: string): boolean {
         const lower_message = message.toLowerCase();
         return this.crisis_keywords.some(keyword => lower_message.includes(keyword));
     }
 
-    /**
-     * Mock AI response for development
-     */
-    private getMockResponse(message: string, is_crisis: boolean): AIResponse {
+    public async streamChatResponse(
+        message: string,
+        viewerToken: string,
+        conversation_history: ChatMessage[] = [],
+        patient_context?: any,
+        onChunk?: (chunk: string) => void,
+        signal?: AbortSignal,
+        avatar_gender?: string
+    ): Promise<AIResponse> {
+        const is_crisis = this.detectCrisis(message);
         if (is_crisis) {
+            const crisisResponse = "I'm very concerned about what you've shared. Your safety is the top priority. Please reach out to the 988 Suicide & Crisis Lifeline immediately by calling or texting 988. They have trained Assistants available 24/7. I also strongly encourage you to contact your Doctor right away.";
+            
+            if (patient_context?.patient_id) {
+                // Note: We do NOT create a notification here because ai.service has no
+                // access to the doctor's user_id. The full crisis alert (to the doctor)
+                // is handled by chat.service.ts → notifyDoctorOfCrisis() after this
+                // function returns. Logging here for observability only.
+                logger.warn(`CRISIS DETECTED for patient ${patient_context.patient_id}`);
+            }
+
+            if (onChunk) onChunk(crisisResponse);
+
+            const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
+            // Use sendCommandFromToken — viewerToken is a JWT; the service decodes it
+            // to the UUID internally. Silently skips if no avatar is configured.
+            await avatarViewerService.sendCommandFromToken(viewerToken, {
+                type: 'state',
+                expression: 'sad',
+                animation: `${prefix}idle_01`
+            });
+
             return {
-                text: `I'm very concerned about what you've shared. Your safety is the top priority. Please reach out to the 988 Suicide & Crisis Lifeline immediately by calling or texting 988. They have trained Assistants available 24/7. I also strongly encourage you to contact your Doctor right away. You don't have to face this alone - help is available.`,
-                token_count: 75,
+                text: crisisResponse,
+                token_count: this.countTokens(crisisResponse),
                 is_crisis: true
             };
         }
 
-        // Generate contextual mock responses
-        const responses = this.getContextualResponses(message);
-        const selected_response = responses[Math.floor(Math.random() * responses.length)];
+        if (!this.groq) {
+            const mockText = "This is a mock response. Please add GROQ_API_KEY to use the real AI model.";
+            if (onChunk) onChunk(mockText);
+            return { text: mockText, token_count: 10, is_crisis: false };
+        }
+
+        const ragContext = await this.queryFaiss(message);
+        const systemPrompt = this.buildSystemPrompt(ragContext, patient_context);
+        const messages: ChatMessage[] = [
+            { role: 'system', content: systemPrompt },
+            ...conversation_history,
+            { role: 'user', content: message }
+        ];
+
+        let fullText = "";
+        let commandExtracted = false;
+
+        try {
+            const stream = await this.groq.chat.completions.create({
+                messages: messages as any,
+                model: 'llama-3.1-8b-instant',
+                temperature: 0.5,
+                max_tokens: 512,
+                stream: true,
+            }, { signal: signal as any });
+
+            let tagBuffer = "";
+
+            for await (const chunk of stream) {
+                if (signal?.aborted) {
+                    logger.warn('AI response generation aborted by client disconnect');
+                    break;
+                }
+
+                const content = chunk.choices[0]?.delta?.content || "";
+                fullText += content;
+                
+                if (!commandExtracted) {
+                    tagBuffer += content;
+                    
+                    if (tagBuffer.includes('</animation>')) {
+                        commandExtracted = true;
+                        const expMatch = tagBuffer.match(/<expression>(.*?)<\/expression>/);
+                        const animMatch = tagBuffer.match(/<animation>(.*?)<\/animation>/);
+                        
+                        const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
+                        
+                        const expression = expMatch ? expMatch[1] : 'calm';
+                        const animation = animMatch ? animMatch[1] : `${prefix}talk_01`;
+
+                        // Send expression + animation to the avatar viewer.
+                        // sendCommandFromToken decodes the JWT to UUID and broadcasts
+                        // over WebSocket. Silently skips if no avatar is configured.
+                        await avatarViewerService.sendCommandFromToken(viewerToken, {
+                            type: 'state',
+                            expression: expression,
+                            animation: animation
+                        });
+
+                        // Get text after tags
+                        const parts = tagBuffer.split('</animation>');
+                        if (parts.length > 1) {
+                            const remainingText = parts.slice(1).join('</animation>');
+                            // Clean up any stray HTML just in case
+                            const cleanText = remainingText.replace(/<.*?>/g, '');
+                            if (onChunk && cleanText) onChunk(cleanText);
+                        }
+                    } else if (tagBuffer.length > 150 && !tagBuffer.includes('<expression>')) {
+                        commandExtracted = true;
+                        if (onChunk && tagBuffer) onChunk(tagBuffer);
+                    }
+                } else {
+                    // Simple strip of any accidental tags emitted later
+                    const cleanContent = content.replace(/<.*?>/g, '');
+                    if (onChunk && cleanContent) onChunk(cleanContent);
+                }
+            }
+
+            // End-of-response: return avatar to calm idle state.
+            if (!signal?.aborted) {
+                const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
+                await avatarViewerService.sendCommandFromToken(viewerToken, {
+                    type: 'state',
+                    expression: 'calm',
+                    animation: `${prefix}idle_01`
+                });
+            }
+
+        } catch (error: any) {
+            // Groq SDK natively throws an AbortError when the abort signal fires
+            if (error.name === 'AbortError') {
+                logger.warn('Groq API request aborted');
+                // Drop out normally so what we generated can be returned/discarded
+            } else {
+                logger.error(`Groq API Error: ${error}`);
+                const errorText = "I'm having trouble connecting to my knowledge base right now. Please try again later.";
+                if (onChunk) onChunk(errorText);
+                return {
+                    text: errorText,
+                    token_count: this.countTokens(errorText),
+                    is_crisis: false
+                };
+            }
+        }
+
+        const cleanFullText = fullText
+            .replace(/<expression>.*?<\/expression>/g, '')
+            .replace(/<animation>.*?<\/animation>/g, '');
 
         return {
-            text: selected_response,
-            token_count: Math.floor(selected_response.split(' ').length * 1.3), // Approximate token count
+            text: cleanFullText,
+            token_count: this.countTokens(cleanFullText),
             is_crisis: false
         };
     }
 
-    /**
-     * Get contextual mock responses based on message content
-     */
-    private getContextualResponses(message: string): string[] {
-        const lower_message = message.toLowerCase();
-
-        // Anxiety-related
-        if (lower_message.includes('anxious') || lower_message.includes('anxiety') || lower_message.includes('worried')) {
-            return [
-                "I hear that you're feeling anxious. Anxiety is a natural response, but it can feel overwhelming. Have you tried any breathing exercises today? Sometimes taking a few deep breaths can help ground us in the present moment.",
-                "It sounds like anxiety is weighing on you right now. Remember, it's okay to feel this way. What specific thoughts or situations are triggering these feelings? Understanding the source can be the first step toward managing it.",
-                "Anxiety can be really challenging. One technique that many find helpful is the 5-4-3-2-1 grounding method: name 5 things you see, 4 you can touch, 3 you hear, 2 you smell, and 1 you taste. Would you like to try this together?"
-            ];
-        }
-
-        // Stress-related
-        if (lower_message.includes('stress') || lower_message.includes('overwhelmed') || lower_message.includes('pressure')) {
-            return [
-                "It sounds like you're dealing with a lot of stress right now. Remember, it's important to take things one step at a time. What's the most pressing thing on your mind today?",
-                "Feeling overwhelmed is completely valid. Sometimes breaking tasks into smaller, manageable pieces can help. What's one small thing you could do today to ease some of that pressure?",
-                "Stress can really take a toll on us. Have you had a chance to do something for yourself today? Even a short walk or a few minutes of quiet time can make a difference."
-            ];
-        }
-
-        // Sleep-related
-        if (lower_message.includes('sleep') || lower_message.includes('tired') || lower_message.includes('insomnia')) {
-            return [
-                "Sleep difficulties can really affect how we feel during the day. Have you noticed any patterns in what might be disrupting your sleep? Sometimes identifying triggers can help us address them.",
-                "Getting quality rest is so important for our mental health. Creating a calming bedtime routine can really help. What does your evening routine look like right now?",
-                "I understand sleep issues can be frustrating. Have you tried any relaxation techniques before bed, like progressive muscle relaxation or guided meditation?"
-            ];
-        }
-
-        // Mood/Depression-related
-        if (lower_message.includes('sad') || lower_message.includes('depressed') || lower_message.includes('down') || lower_message.includes('hopeless')) {
-            return [
-                "I'm sorry you're feeling this way. It takes courage to acknowledge these feelings. Remember that what you're experiencing is valid, and you don't have to go through this alone. Have you been able to talk to your Doctor about how you've been feeling?",
-                "Feeling down can make everything seem harder. Even small steps count - have you been able to do any of your wellness activities today? Sometimes gentle movement or journaling can help shift our perspective a bit.",
-                "Thank you for sharing how you're feeling. Depression can make it hard to see the positives, but you're taking an important step by reaching out. What's one thing, even something small, that brought you a moment of peace recently?"
-            ];
-        }
-
-        // Relationship-related
-        if (lower_message.includes('relationship') || lower_message.includes('friend') || lower_message.includes('family') || lower_message.includes('partner')) {
-            return [
-                "Relationships can be complex and challenging. It sounds like this is weighing on you. What aspect of this relationship is most difficult for you right now?",
-                "Navigating relationships requires patience and understanding - both for others and ourselves. Have you been able to communicate your feelings to the person involved?",
-                "It's natural for relationships to have ups and downs. What matters most is how we handle those moments. What would healthy communication look like in this situation for you?"
-            ];
-        }
-
-        // Progress/Positive
-        if (lower_message.includes('better') || lower_message.includes('good') || lower_message.includes('progress') || lower_message.includes('happy')) {
-            return [
-                "That's wonderful to hear! It's important to acknowledge and celebrate these positive moments. What do you think contributed to feeling this way?",
-                "I'm so glad you're experiencing some positive feelings. These moments are valuable - they remind us that change is possible. How can you build on this momentum?",
-                "It's great that you're noticing improvements! Progress isn't always linear, but recognizing these positive shifts is an important part of the journey. What's been most helpful for you?"
-            ];
-        }
-
-        // Gratitude/Reflection
-        if (lower_message.includes('grateful') || lower_message.includes('thankful') || lower_message.includes('appreciate')) {
-            return [
-                "Practicing gratitude is such a powerful tool for Clinic. It's beautiful that you're taking time to notice the positive things in your life. What else are you grateful for today?",
-                "That's a wonderful perspective. Gratitude can really shift our mindset. How does focusing on these positive aspects make you feel?",
-                "Thank you for sharing that. Recognizing what we're grateful for, even in challenging times, can be incredibly grounding. How might you carry this feeling forward?"
-            ];
-        }
-
-        // Default responses
-        return [
-            "Thank you for sharing that with me. I'm here to listen and support you. Can you tell me more about what's on your mind?",
-            "I appreciate you opening up. It sounds like you're working through some important thoughts and feelings. What would be most helpful for you to explore right now?",
-            "I hear you. Sometimes just expressing what we're feeling can be a relief. How are you taking care of yourself today?",
-            "That's an important thing to reflect on. Clinic is a journey, and every step counts. What's one thing you'd like to focus on moving forward?",
-            "Thank you for trusting me with your thoughts. Remember, you're not alone in this. Your Doctor and I are here to support you. What feels most important to address right now?"
-        ];
-    }
-
-    /**
-     * Count tokens (approximate)
-     */
     countTokens(text: string): number {
-        // Rough approximation: 1 token ≈ 0.75 words
-        const words = text.split(/\s+/).length;
+        // Use correct \s+ (single backslash) so it matches whitespace between words
+        const words = text.trim().split(/\s+/).length;
         return Math.ceil(words * 1.3);
     }
-
-    /**
-     * TODO: Implement real Claude API call
-     * Uncomment when ready to integrate Claude
-     */
-    // private async getClaudeResponse(
-    //     message: string,
-    //     conversation_history: ChatMessage[],
-    //     patient_context?: any
-    // ): Promise<AIResponse> {
-    //     // This will be implemented when integrating real Claude API
-    //     // const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-        
-    //     // const system_prompt = this.buildSystemPrompt(patient_context);
-    //     // const messages = this.formatConversationHistory(conversation_history, message);
-        
-    //     // const response = await anthropic.messages.create({
-    //     //     model: 'claude-sonnet-4-20250514',
-    //     //     max_tokens: 800,
-    //     //     temperature: 0.7,
-    //     //     system: system_prompt,
-    //     //     messages: messages
-    //     // });
-        
-    //     // return {
-    //     //     text: response.content[0].text,
-    //     //     token_count: response.usage.output_tokens,
-    //     //     is_crisis: this.detectCrisis(response.content[0].text)
-    //     // };
-
-    //     throw new Error('Claude API not implemented yet');
-    // }
-
-    /**
-     * Build system prompt for Claude (for future implementation)
-     */
-    // private buildSystemPrompt(patient_context?: any): string {
-    //     return `You are a compassionate Clinic assistant for the Apothecary platform.
-
-    // Patient reference: ${patient_context?.patient_id || 'unknown'}
-
-    // Guidelines:
-    // - Warm, non-judgmental, evidence-based tone
-    // - Always recommend consulting their Doctor for clinical decisions
-    // - If patient expresses crisis or self-harm intent: immediately provide 988 Suicide & Crisis Lifeline
-    //   and urge them to contact their Doctor
-    // - Do not make clinical diagnoses
-    // - Focus on supportive listening and gentle guidance
-    // - Encourage healthy coping strategies and self-care
-
-    // Remember: You are a supportive tool, not a replacement for professional Clinical Care.`;
-    // }
 }
 
 export const aiService = new AIService();

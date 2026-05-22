@@ -31,11 +31,22 @@ export class AvatarViewerController {
         }
     }
 
+    async extendSession(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const token = req.body.viewerToken;
+            const result = await avatarViewerService.extendSession(token);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async streamAvatarGlb(req: Request, res: Response, next: NextFunction): Promise<void> {
         try {
             const sessionToken = typeof req.query.session === 'string' ? req.query.session : '';
             const asset = await avatarViewerService.getAvatarGlb(sessionToken);
 
+            res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
             this.sendGlb(res, asset, 'avatar.glb');
         } catch (error) {
             next(error);
@@ -71,7 +82,7 @@ export class AvatarViewerController {
     private sendGlb(res: Response, asset: { buffer: Buffer; contentType: string }, fileName: string) {
         res.setHeader('Content-Type', asset.contentType);
         res.setHeader('Content-Disposition', `inline; filename="${fileName}"`);
-        res.setHeader('Cache-Control', 'private, max-age=300');
+        res.setHeader('Cache-Control', 'public, max-age=86400, immutable');
         res.setHeader('Access-Control-Allow-Origin', '*');
         res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
         res.send(asset.buffer);

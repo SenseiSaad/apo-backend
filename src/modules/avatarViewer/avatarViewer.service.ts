@@ -51,29 +51,41 @@ export class AvatarViewerService {
             throw new NotFoundError('Active avatar not found');
         }
 
-        const sessionId = crypto.randomUUID();
         const ttlSeconds = Number(process.env.AVATAR_VIEWER_SESSION_TTL_SECONDS || 15 * 60);
         const expiresAt = new Date(Date.now() + ttlSeconds * 1000);
 
-        await AvatarViewerSession.create({
-            session_id: sessionId,
+        let session = await AvatarViewerSession.findOne({
             user_id: user._id,
             patient_id: patient._id,
             avatar_record_id: avatar._id,
             status: 'active',
-            expires_at: expiresAt
+            expires_at: { $gt: new Date() }
         });
+
+        if (session) {
+            session.expires_at = expiresAt;
+            await session.save();
+        } else {
+            session = await AvatarViewerSession.create({
+                session_id: crypto.randomUUID(),
+                user_id: user._id,
+                patient_id: patient._id,
+                avatar_record_id: avatar._id,
+                expires_at: expiresAt,
+                status: 'active'
+            });
+        }
 
         const token = this.signViewerToken({
             type: 'avatar_viewer_session',
-            sessionId,
-            userId,
+            sessionId: session.session_id,
+            userId: user._id.toString(),
             patientId: patient._id.toString()
         }, ttlSeconds);
         const viewerBaseUrl = (process.env.AVATAR_VIEWER_BASE_URL || 'https://avatar-viewer.Apothecary.com').replace(/\/+$/, '');
 
         return {
-            sessionId,
+            sessionId: session.session_id,
             viewerUrl: `${viewerBaseUrl}/viewer?session=${encodeURIComponent(token)}`,
             webSocketUrl: this.buildWebSocketUrl(token),
             token,
@@ -88,7 +100,7 @@ export class AvatarViewerService {
     }
 
     async resolveSessionFromToken(token?: string | null) {
-        const payload = this.verifyViewerToken(token);
+        const payload = this.verifyViewerToken(token, true);
         const session = await AvatarViewerSession.findOne({ session_id: payload.sessionId });
 
         if (!session || session.status !== 'active' || session.expires_at <= new Date()) {
@@ -118,6 +130,21 @@ export class AvatarViewerService {
                 }
             }
         };
+    }
+
+    async extendSession(token?: string | null) {
+        const payload = this.verifyViewerToken(token, true);
+        const session = await AvatarViewerSession.findOne({ session_id: payload.sessionId });
+
+        if (!session || session.status !== 'active') {
+            throw new UnauthorizedError('Viewer session is invalid');
+        }
+
+        const ttlSeconds = Number(process.env.AVATAR_VIEWER_SESSION_TTL_SECONDS || 15 * 60);
+        session.expires_at = new Date(Date.now() + ttlSeconds * 1000);
+        await session.save();
+
+        return { success: true, expiresAt: session.expires_at };
     }
 
     attachWebSocketServer(server: HttpServer) {
@@ -174,6 +201,47 @@ export class AvatarViewerService {
             commandId: commandEnvelope.commandId,
             delivered
         };
+    }
+
+    /**
+     * Send a WebSocket command using the viewer JWT token (not the raw UUID).
+     *
+     * This is the correct method to call from ai.service.ts. The frontend passes
+     * the signed JWT it received from createSession(), NOT the raw UUID session_id.
+     * This method decodes the JWT, extracts the UUID, validates the session is still
+     * active, and broadcasts the command — without requiring callers to know the UUID.
+     *
+     * Returns silently (no throw) if the token is missing, invalid, or the session
+     * has expired, so AI chat continues uninterrupted even when no avatar is configured.
+     */
+    async sendCommandFromToken(viewerToken: string | undefined | null, command: AvatarViewerCommandInput): Promise<void> {
+        if (!viewerToken) return;
+
+        try {
+            // verifyViewerToken decodes + validates the JWT and returns the payload
+            // which contains sessionId (the UUID stored in AvatarViewerSession.session_id)
+            const payload = this.verifyViewerToken(viewerToken, true);
+            const sessionId = payload.sessionId;
+
+            // Verify the session is still active in DB before broadcasting
+            const session = await AvatarViewerSession.findOne({ session_id: sessionId });
+            if (!session || session.status !== 'active' || session.expires_at <= new Date()) {
+                logger.warn(`Avatar sendCommandFromToken: session ${sessionId} is inactive or expired — skipping`);
+                return;
+            }
+
+            const commandEnvelope = {
+                type: 'command',
+                commandId: crypto.randomUUID(),
+                sentAt: new Date().toISOString(),
+                payload: command
+            };
+
+            this.broadcast(sessionId, commandEnvelope);
+        } catch (e) {
+            // Token invalid / expired — do not throw. AI chat must continue without avatar.
+            logger.warn(`Avatar sendCommandFromToken: failed to send command — ${(e as Error).message}`);
+        }
     }
 
     async getAvatarGlb(token?: string | null) {
@@ -363,14 +431,15 @@ export class AvatarViewerService {
         return jwt.sign(payload, this.getViewerSecret(), options);
     }
 
-    private verifyViewerToken(token?: string | null) {
+    private verifyViewerToken(token?: string | null, ignoreExpiration = false) {
         if (!token) {
             throw new UnauthorizedError('Viewer session token is required');
         }
 
         const payload = jwt.verify(token, this.getViewerSecret(), {
             issuer: 'Apothecary-plus',
-            audience: 'Apothecary-avatar-viewer'
+            audience: 'Apothecary-avatar-viewer',
+            ignoreExpiration
         }) as ViewerTokenPayload;
 
         if (payload.type !== 'avatar_viewer_session' || !payload.sessionId) {

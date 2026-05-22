@@ -550,7 +550,15 @@ function scheduleWsReconnect(urlStr) {
 }
 
 function handleSocketMessage(socket, raw) {
-  const message = JSON.parse(raw);
+  let message;
+  try {
+    message = JSON.parse(raw);
+  } catch (e) {
+    // Malformed frame — log and ignore. Do NOT rethrow; rethrowing kills the
+    // message event listener and makes the avatar permanently unresponsive.
+    console.warn("Avatar viewer: received non-JSON WebSocket frame, ignoring.", e?.message);
+    return;
+  }
 
   if (message.type === "ready") {
     setStatus("Live avatar channel ready.");
@@ -561,19 +569,25 @@ function handleSocketMessage(socket, raw) {
     return;
   }
 
-  const command = message.payload;
-  if (command.type === "expression") {
-    applyExpression(command.name);
-  }
-  if (command.type === "animation") {
-    void applyAnimation(command.name);
-  }
-  if (command.type === "state") {
-    applyExpression(command.expression);
-    void applyAnimation(command.animation);
-  }
+  try {
+    const command = message.payload;
+    if (!command) return;
 
-  socket.send(JSON.stringify({ type: "ack", commandId: message.commandId }));
+    if (command.type === "expression") {
+      applyExpression(command.name);
+    }
+    if (command.type === "animation") {
+      void applyAnimation(command.name);
+    }
+    if (command.type === "state") {
+      applyExpression(command.expression);
+      void applyAnimation(command.animation);
+    }
+
+    socket.send(JSON.stringify({ type: "ack", commandId: message.commandId }));
+  } catch (e) {
+    console.warn("Avatar viewer: error dispatching command, ignoring.", e?.message);
+  }
 }
 
 // ─── EXPRESSION CONTROL DEMO ────────────────────────────────────────────────
@@ -655,15 +669,24 @@ async function main() {
 
   // After a short delay, play the Friendly Wave expression once, then return to idle.
   setTimeout(() => {
-    void applyAnimation("m_expr_01", { playOnce: true, returnTo: idleAnimation });
+    const waveAnim = idleAnimation.startsWith("f_") ? "f_expr_01" : "m_expr_01";
+    void applyAnimation(waveAnim, { playOnce: true, returnTo: idleAnimation });
   }, 2000);
 
-  // ── EXPRESSION CONTROL DEMO (remove once real WebSocket commands are in use) ──
-  // Starts ~9 s after load: 2 s wave delay + ~5 s wave clip + 2 s buffer for idle blend.
-  // Each of the 9 built-in expression presets is held for 2.5 s so you can verify
-  // the morph-target system visually. Replace with actual Doctor-driven commands.
-  setTimeout(runExpressionDemo, 9000);
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ── EXPRESSION DEMO — DEV ONLY ─────────────────────────────────────────
+  // runExpressionDemo() cycles through every built-in expression preset so you
+  // can visually verify the morph-target system. It must NOT run in production
+  // because it overrides real AI-driven avatar commands from the WebSocket.
+  //
+  // To enable locally, open the browser console and type:
+  //   runExpressionDemo()
+  // or add ?dev_demo=1 to the URL when testing outside production.
+  //
+  const isDev = new URLSearchParams(window.location.search).get("dev_demo") === "1";
+  if (isDev) {
+    setTimeout(runExpressionDemo, 9000);
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 }
 
 main().catch((error) => setStatus(error.message || "Viewer failed to load.", true));

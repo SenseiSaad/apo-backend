@@ -5,7 +5,8 @@ export const sendMessageSchema = z.object({
     message: z.string()
         .min(1, 'Message cannot be empty')
         .max(2000, 'Message must be less than 2000 characters'),
-    session_id: z.string().optional()
+    session_id: z.string().optional(),
+    viewer_session_id: z.string().optional()
 });
 
 // Get chat history

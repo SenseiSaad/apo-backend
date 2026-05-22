@@ -19,6 +19,13 @@ router.post(
 
 router.get('/session/me', avatarViewerController.resolveSession.bind(avatarViewerController));
 
+router.put(
+    '/session/extend',
+    verifyJWT,
+    requireRole([Role.PATIENT]),
+    avatarViewerController.extendSession.bind(avatarViewerController)
+);
+
 router.get('/assets/avatar.glb', avatarViewerController.streamAvatarGlb.bind(avatarViewerController));
 router.get('/assets/animations/:animationId.glb', avatarViewerController.streamAnimationGlb.bind(avatarViewerController));
 
