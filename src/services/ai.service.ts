@@ -79,6 +79,11 @@ export class AIService {
             this.faissReady = false;
             setTimeout(() => this.initFaissDaemon(), 5000);
         });
+
+        this.faissProcess.on('error', (err) => {
+            logger.error(`FAISS daemon failed to start or crashed: ${err.message}. Ensure Python is installed in the Heroku dyno.`);
+            this.faissReady = false;
+        });
     }
 
     private async queryFaiss(query: string): Promise<string> {
@@ -118,6 +123,36 @@ export class AIService {
         });
     }
 
+const MALE_IDLE_ANIMATIONS = [
+    'm_idle_01', 'm_idle_02', 'm_idle_var_01', 'm_idle_var_02', 'm_idle_var_03', 
+    'm_idle_var_04', 'm_idle_var_05', 'm_idle_var_06', 'm_idle_var_07', 
+    'm_idle_var_08', 'm_idle_var_09', 'm_idle_var_10'
+];
+
+const FEMALE_IDLE_ANIMATIONS = [
+    'f_idle_01', 'f_idle_var_01', 'f_idle_var_02', 'f_idle_var_03', 'f_idle_var_04', 
+    'f_idle_var_05', 'f_idle_var_06', 'f_idle_var_07', 'f_idle_var_08', 'f_idle_var_09',
+    ...MALE_IDLE_ANIMATIONS
+];
+
+const MALE_TALK_ANIMATIONS = [
+    'm_talk_01', 'm_talk_02', 'm_talk_03', 'm_talk_04', 'm_talk_05', 'm_talk_06', 'm_talk_07', 'm_talk_08', 'm_talk_09', 'm_talk_10',
+    'm_expr_01', 'm_expr_02', 'm_expr_04', 'm_expr_05', 'm_expr_06', 'm_expr_07', 'm_expr_08', 'm_expr_09', 'm_expr_10', 'm_expr_11', 'm_expr_12', 'm_expr_13', 'm_expr_14', 'm_expr_15', 'm_expr_16', 'm_expr_17', 'm_expr_18'
+];
+
+const FEMALE_TALK_ANIMATIONS = [
+    'f_talk_01', 'f_talk_02', 'f_talk_03', 'f_talk_04', 'f_talk_05', 'f_talk_06',
+    ...MALE_TALK_ANIMATIONS
+];
+
+function getRandomAnimation(gender: string = 'male', type: 'idle' | 'talk'): string {
+    const isFemale = gender.toLowerCase() === 'female';
+    const list = type === 'idle' 
+        ? (isFemale ? FEMALE_IDLE_ANIMATIONS : MALE_IDLE_ANIMATIONS)
+        : (isFemale ? FEMALE_TALK_ANIMATIONS : MALE_TALK_ANIMATIONS);
+    return list[Math.floor(Math.random() * list.length)];
+}
+
     private buildSystemPrompt(contextData: string, patient_context?: any): string {
         return `You are a compassionate Clinical assistant for the Thinkwell Plus / Apothecary platform.
 
@@ -136,10 +171,10 @@ Guidelines:
 AVATAR CONTROL INSTRUCTIONS:
 You must prepend your response with an <expression> and <animation> tag to control the 3D avatar.
 Valid expressions: calm, content, joyful, neutral, happy, sad, angry, fear, disgust, love
-Valid animations: m_idle_01, m_talk_01, m_talk_02, f_idle_01, f_talk_01, f_talk_02 (use talk for speaking, idle for resting).
+Valid animations: talk, idle. (always use talk while speaking)
 
 Format exactly like this:
-<expression>happy</expression><animation>f_talk_01</animation>Hello! How can I help you today?`;
+<expression>happy</expression><animation>talk</animation>Hello! How can I help you today?`;
     }
 
     private detectCrisis(message: string): boolean {
@@ -170,13 +205,12 @@ Format exactly like this:
 
             if (onChunk) onChunk(crisisResponse);
 
-            const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
             // Use sendCommandFromToken — viewerToken is a JWT; the service decodes it
             // to the UUID internally. Silently skips if no avatar is configured.
             await avatarViewerService.sendCommandFromToken(viewerToken, {
                 type: 'state',
                 expression: 'sad',
-                animation: `${prefix}idle_01`
+                animation: getRandomAnimation(avatar_gender, 'idle')
             });
 
             return {
@@ -231,10 +265,16 @@ Format exactly like this:
                         const expMatch = tagBuffer.match(/<expression>(.*?)<\/expression>/);
                         const animMatch = tagBuffer.match(/<animation>(.*?)<\/animation>/);
                         
-                        const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
-                        
                         const expression = expMatch ? expMatch[1] : 'calm';
-                        const animation = animMatch ? animMatch[1] : `${prefix}talk_01`;
+                        const animationTag = animMatch ? animMatch[1] : 'talk';
+                        let animation = animationTag;
+                        if (animationTag.includes('talk')) {
+                            animation = getRandomAnimation(avatar_gender, 'talk');
+                        } else if (animationTag.includes('idle')) {
+                            animation = getRandomAnimation(avatar_gender, 'idle');
+                        } else {
+                            animation = getRandomAnimation(avatar_gender, 'talk');
+                        }
 
                         // Send expression + animation to the avatar viewer.
                         // sendCommandFromToken decodes the JWT to UUID and broadcasts
@@ -255,6 +295,14 @@ Format exactly like this:
                         }
                     } else if (tagBuffer.length > 150 && !tagBuffer.includes('<expression>')) {
                         commandExtracted = true;
+                        
+                        // FALLBACK: The LLM forgot the tags. Force the avatar to talk so it isn't frozen.
+                        avatarViewerService.sendCommandFromToken(viewerToken, {
+                            type: 'state',
+                            expression: 'calm',
+                            animation: getRandomAnimation(avatar_gender, 'talk')
+                        }).catch(e => logger.warn(`Avatar fallback failed: ${e.message}`));
+                        
                         if (onChunk && tagBuffer) onChunk(tagBuffer);
                     }
                 } else {
@@ -262,16 +310,6 @@ Format exactly like this:
                     const cleanContent = content.replace(/<.*?>/g, '');
                     if (onChunk && cleanContent) onChunk(cleanContent);
                 }
-            }
-
-            // End-of-response: return avatar to calm idle state.
-            if (!signal?.aborted) {
-                const prefix = avatar_gender?.toLowerCase() === 'female' ? 'f_' : 'm_';
-                await avatarViewerService.sendCommandFromToken(viewerToken, {
-                    type: 'state',
-                    expression: 'calm',
-                    animation: `${prefix}idle_01`
-                });
             }
 
         } catch (error: any) {
@@ -289,6 +327,15 @@ Format exactly like this:
                     is_crisis: false
                 };
             }
+        } finally {
+            // End-of-response (or abort): return avatar to calm idle state.
+            // Even if the connection to the client was aborted, we MUST send the idle state
+            // to the avatar viewer because its websocket might still be alive.
+            await avatarViewerService.sendCommandFromToken(viewerToken, {
+                type: 'state',
+                expression: 'calm',
+                animation: getRandomAnimation(avatar_gender, 'idle')
+            });
         }
 
         const cleanFullText = fullText
