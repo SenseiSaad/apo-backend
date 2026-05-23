@@ -172,7 +172,12 @@ Guidelines:
 AVATAR CONTROL INSTRUCTIONS:
 You must prepend your response with an <expression> and <animation> tag to control the 3D avatar.
 Valid expressions: calm, content, joyful, neutral, happy, sad, angry, fear, disgust, love
-Valid animations: talk, idle. (always use talk while speaking)
+Valid animations: 
+- general: talk, idle (these will randomize automatically)
+- dances: m_dance_01 to m_dance_09, m_dance_11, f_dance_01, f_dance_04 to f_dance_07
+- locomotion: m_walk_01, m_run_01, m_walk_jump_1, m_crouch, f_walk_02, f_run_01, f_crouch, etc.
+- gestures: m_expr_01 (wave), m_expr_02 (you there), m_expr_04 (awkward), m_expr_05, m_expr_06 (stretch), m_expr_07 (laugh), m_expr_12 (approval), m_expr_13 (wave hello), m_expr_16 (thumbs down)
+If you specifically want the avatar to dance, jump, or do a specific gesture based on the user's message, use the exact ID (e.g. <animation>m_dance_05</animation>). Otherwise, just use <animation>talk</animation>.
 
 Format exactly like this:
 <expression>happy</expression><animation>talk</animation>Hello! How can I help you today?`;
@@ -269,12 +274,12 @@ Format exactly like this:
                         const expression = expMatch ? expMatch[1] : 'calm';
                         const animationTag = animMatch ? animMatch[1] : 'talk';
                         let animation = animationTag;
-                        if (animationTag.includes('talk')) {
+                        if (animationTag === 'talk' || animationTag === 'm_talk' || animationTag === 'f_talk') {
                             animation = getRandomAnimation(avatar_gender, 'talk');
-                        } else if (animationTag.includes('idle')) {
+                        } else if (animationTag === 'idle' || animationTag === 'm_idle' || animationTag === 'f_idle') {
                             animation = getRandomAnimation(avatar_gender, 'idle');
                         } else {
-                            animation = getRandomAnimation(avatar_gender, 'talk');
+                            animation = animationTag; // Allow exact IDs like m_dance_05
                         }
 
                         // Send expression + animation to the avatar viewer.
@@ -283,7 +288,9 @@ Format exactly like this:
                         await avatarViewerService.sendCommandFromToken(viewerToken, {
                             type: 'state',
                             expression: expression,
-                            animation: animation
+                            animation: animation,
+                            playOnce: !animationTag.includes('idle'),
+                            returnTo: getRandomAnimation(avatar_gender, 'idle')
                         });
 
                         // Get text after tags
@@ -301,7 +308,9 @@ Format exactly like this:
                         avatarViewerService.sendCommandFromToken(viewerToken, {
                             type: 'state',
                             expression: 'calm',
-                            animation: getRandomAnimation(avatar_gender, 'talk')
+                            animation: getRandomAnimation(avatar_gender, 'talk'),
+                            playOnce: true,
+                            returnTo: getRandomAnimation(avatar_gender, 'idle')
                         }).catch(e => logger.warn(`Avatar fallback failed: ${e.message}`));
                         
                         if (onChunk && tagBuffer) onChunk(tagBuffer);

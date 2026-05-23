@@ -581,7 +581,10 @@ function handleSocketMessage(socket, raw) {
     }
     if (command.type === "state") {
       applyExpression(command.expression);
-      void applyAnimation(command.animation);
+      void applyAnimation(command.animation, { 
+          playOnce: command.playOnce || false,
+          returnTo: command.returnTo || null
+      });
     }
 
     socket.send(JSON.stringify({ type: "ack", commandId: message.commandId }));

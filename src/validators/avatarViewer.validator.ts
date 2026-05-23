@@ -23,7 +23,9 @@ export const avatarViewerCommandSchema = z.discriminatedUnion('type', [
     z.object({
         type: z.literal('state'),
         expression: z.string().trim().min(1).max(80),
-        animation: z.string().trim().min(1).max(80)
+        animation: z.string().trim().min(1).max(80),
+        playOnce: z.boolean().optional(),
+        returnTo: z.string().optional()
     })
 ]);
 
