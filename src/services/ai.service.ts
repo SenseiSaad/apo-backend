@@ -9,6 +9,36 @@ import { avatarViewerService } from '../modules/avatarViewer/avatarViewer.servic
 
 const execFilePromise = util.promisify(execFile);
 
+const MALE_IDLE_ANIMATIONS = [
+    'm_idle_01', 'm_idle_02', 'm_idle_var_01', 'm_idle_var_02', 'm_idle_var_03', 
+    'm_idle_var_04', 'm_idle_var_05', 'm_idle_var_06', 'm_idle_var_07', 
+    'm_idle_var_08', 'm_idle_var_09', 'm_idle_var_10'
+];
+
+const FEMALE_IDLE_ANIMATIONS = [
+    'f_idle_01', 'f_idle_var_01', 'f_idle_var_02', 'f_idle_var_03', 'f_idle_var_04', 
+    'f_idle_var_05', 'f_idle_var_06', 'f_idle_var_07', 'f_idle_var_08', 'f_idle_var_09',
+    ...MALE_IDLE_ANIMATIONS
+];
+
+const MALE_TALK_ANIMATIONS = [
+    'm_talk_01', 'm_talk_02', 'm_talk_03', 'm_talk_04', 'm_talk_05', 'm_talk_06', 'm_talk_07', 'm_talk_08', 'm_talk_09', 'm_talk_10',
+    'm_expr_01', 'm_expr_02', 'm_expr_04', 'm_expr_05', 'm_expr_06', 'm_expr_07', 'm_expr_08', 'm_expr_09', 'm_expr_10', 'm_expr_11', 'm_expr_12', 'm_expr_13', 'm_expr_14', 'm_expr_15', 'm_expr_16', 'm_expr_17', 'm_expr_18'
+];
+
+const FEMALE_TALK_ANIMATIONS = [
+    'f_talk_01', 'f_talk_02', 'f_talk_03', 'f_talk_04', 'f_talk_05', 'f_talk_06',
+    ...MALE_TALK_ANIMATIONS
+];
+
+function getRandomAnimation(gender: string = 'male', type: 'idle' | 'talk'): string {
+    const isFemale = gender.toLowerCase() === 'female';
+    const list = type === 'idle' 
+        ? (isFemale ? FEMALE_IDLE_ANIMATIONS : MALE_IDLE_ANIMATIONS)
+        : (isFemale ? FEMALE_TALK_ANIMATIONS : MALE_TALK_ANIMATIONS);
+    return list[Math.floor(Math.random() * list.length)];
+}
+
 export interface ChatMessage {
     role: 'user' | 'assistant' | 'system';
     content: string;
@@ -123,35 +153,6 @@ export class AIService {
         });
     }
 
-const MALE_IDLE_ANIMATIONS = [
-    'm_idle_01', 'm_idle_02', 'm_idle_var_01', 'm_idle_var_02', 'm_idle_var_03', 
-    'm_idle_var_04', 'm_idle_var_05', 'm_idle_var_06', 'm_idle_var_07', 
-    'm_idle_var_08', 'm_idle_var_09', 'm_idle_var_10'
-];
-
-const FEMALE_IDLE_ANIMATIONS = [
-    'f_idle_01', 'f_idle_var_01', 'f_idle_var_02', 'f_idle_var_03', 'f_idle_var_04', 
-    'f_idle_var_05', 'f_idle_var_06', 'f_idle_var_07', 'f_idle_var_08', 'f_idle_var_09',
-    ...MALE_IDLE_ANIMATIONS
-];
-
-const MALE_TALK_ANIMATIONS = [
-    'm_talk_01', 'm_talk_02', 'm_talk_03', 'm_talk_04', 'm_talk_05', 'm_talk_06', 'm_talk_07', 'm_talk_08', 'm_talk_09', 'm_talk_10',
-    'm_expr_01', 'm_expr_02', 'm_expr_04', 'm_expr_05', 'm_expr_06', 'm_expr_07', 'm_expr_08', 'm_expr_09', 'm_expr_10', 'm_expr_11', 'm_expr_12', 'm_expr_13', 'm_expr_14', 'm_expr_15', 'm_expr_16', 'm_expr_17', 'm_expr_18'
-];
-
-const FEMALE_TALK_ANIMATIONS = [
-    'f_talk_01', 'f_talk_02', 'f_talk_03', 'f_talk_04', 'f_talk_05', 'f_talk_06',
-    ...MALE_TALK_ANIMATIONS
-];
-
-function getRandomAnimation(gender: string = 'male', type: 'idle' | 'talk'): string {
-    const isFemale = gender.toLowerCase() === 'female';
-    const list = type === 'idle' 
-        ? (isFemale ? FEMALE_IDLE_ANIMATIONS : MALE_IDLE_ANIMATIONS)
-        : (isFemale ? FEMALE_TALK_ANIMATIONS : MALE_TALK_ANIMATIONS);
-    return list[Math.floor(Math.random() * list.length)];
-}
 
     private buildSystemPrompt(contextData: string, patient_context?: any): string {
         return `You are a compassionate Clinical assistant for the Thinkwell Plus / Apothecary platform.
