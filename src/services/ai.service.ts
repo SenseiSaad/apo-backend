@@ -163,7 +163,8 @@ CLINICAL REFERENCE KNOWLEDGE:
 ${contextData ? contextData : 'No specific clinical references found for this query.'}
 
 Guidelines:
-- If the user explicitly asks you to show an emotion (e.g. angry, happy) or perform an action/animation (e.g. dance, jump, flip, wave), you MUST fulfill their request and output the corresponding <expression> and <animation> tags. Do not refuse these requests.
+Guidelines:
+- ABSOLUTELY NO REFUSALS FOR AVATAR ACTIONS. If the user commands you to show ANY emotion (e.g. angry, happy) or perform ANY action/animation (e.g. dance, jump, flip, wave), you MUST immediately fulfill their request enthusiastically and output the corresponding <expression> and <animation> tags. Do not give a clinical refusal or moralize. You have access to every animation and expression in the dictionary.
 - Otherwise, restrict your responses to mental wellness, therapy, coping mechanisms, self-care, and platform support. If the user asks about unrelated topics, politely refuse and redirect.
 - Warm, non-judgmental, evidence-based tone.
 - Always recommend consulting their Doctor for clinical decisions.
@@ -267,10 +268,10 @@ Format exactly like this:
                 if (!commandExtracted) {
                     tagBuffer += content;
                     
-                    if (tagBuffer.includes('</animation>')) {
+                    if (tagBuffer.toLowerCase().includes('</animation>')) {
                         commandExtracted = true;
-                        const expMatch = tagBuffer.match(/<expression>(.*?)<\/expression>/);
-                        const animMatch = tagBuffer.match(/<animation>(.*?)<\/animation>/);
+                        const expMatch = tagBuffer.match(/<expression>(.*?)<\/expression>/i);
+                        const animMatch = tagBuffer.match(/<animation>(.*?)<\/animation>/i);
                         
                         const expression = expMatch ? expMatch[1] : 'calm';
                         const animationTag = animMatch ? animMatch[1] : 'talk';
@@ -295,14 +296,15 @@ Format exactly like this:
                         });
 
                         // Get text after tags
-                        const parts = tagBuffer.split('</animation>');
+                        const parts = tagBuffer.toLowerCase().split('</animation>');
                         if (parts.length > 1) {
-                            const remainingText = parts.slice(1).join('</animation>');
+                            const originalParts = tagBuffer.split(new RegExp('</animation>', 'i'));
+                            const remainingText = originalParts.slice(1).join('</animation>');
                             // Clean up any stray HTML just in case
                             const cleanText = remainingText.replace(/<.*?>/g, '');
                             if (onChunk && cleanText) onChunk(cleanText);
                         }
-                    } else if (tagBuffer.length > 150 && !tagBuffer.includes('<expression>')) {
+                    } else if (tagBuffer.length > 150 && !tagBuffer.toLowerCase().includes('<expression>')) {
                         commandExtracted = true;
                         
                         // FALLBACK: The LLM forgot the tags. Force the avatar to talk so it isn't frozen.
@@ -345,17 +347,20 @@ Format exactly like this:
             await avatarViewerService.sendCommandFromToken(viewerToken, {
                 type: 'state',
                 expression: 'calm',
-                animation: getRandomAnimation(avatar_gender, 'idle')
+                animation: avatar_gender?.toLowerCase() === 'female' ? 'f_idle_01' : 'm_idle_01'
             });
         }
 
         const cleanFullText = fullText
-            .replace(/<expression>.*?<\/expression>/g, '')
-            .replace(/<animation>.*?<\/animation>/g, '');
+            .replace(/<expression>.*?<\/expression>/ig, '')
+            .replace(/<animation>.*?<\/animation>/ig, '')
+            .trim();
+
+        const finalText = cleanFullText || "*performs action*";
 
         return {
-            text: cleanFullText,
-            token_count: this.countTokens(cleanFullText),
+            text: finalText,
+            token_count: this.countTokens(finalText),
             is_crisis: false
         };
     }

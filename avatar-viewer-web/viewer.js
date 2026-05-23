@@ -389,7 +389,8 @@ function updateExpressions(delta) {
 // ─── Expressions ──────────────────────────────────────────────────────────
 // Sets the desired target values; updateExpressions() lerps to them each frame.
 function applyExpression(name) {
-  const preset = expressionPresets[name] || expressionPresets.neutral;
+  const lowerName = (name || '').toLowerCase();
+  const preset = expressionPresets[lowerName] || expressionPresets.neutral;
 
   // Mark all currently-active keys as targeting 0 (they will lerp out)
   for (const key of Object.keys(_exprTarget)) _exprTarget[key] = 0;
@@ -403,7 +404,8 @@ function applyExpression(name) {
 const ANIM_FADE_SECS = 0.4;
 
 async function applyAnimation(name, { playOnce = false, returnTo = null } = {}) {
-  const animation = animationManifest.find((item) => item.id === name || item.name === name) || animationManifest[0];
+  const lowerName = (name || '').toLowerCase();
+  const animation = animationManifest.find((item) => item.id.toLowerCase() === lowerName || item.name.toLowerCase() === lowerName) || animationManifest[0];
   if (!avatar || !animation?.url) {
     setStatus(`Animation unavailable: ${name}`);
     return;
