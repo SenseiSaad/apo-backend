@@ -324,7 +324,6 @@ Format exactly like this:
                     if (onChunk && cleanContent) onChunk(cleanContent);
                 }
             }
-
         } catch (error: any) {
             // Groq SDK natively throws an AbortError when the abort signal fires
             if (error.name === 'AbortError') {
@@ -340,15 +339,6 @@ Format exactly like this:
                     is_crisis: false
                 };
             }
-        } finally {
-            // End-of-response (or abort): return avatar to calm idle state.
-            // Even if the connection to the client was aborted, we MUST send the idle state
-            // to the avatar viewer because its websocket might still be alive.
-            await avatarViewerService.sendCommandFromToken(viewerToken, {
-                type: 'state',
-                expression: 'calm',
-                animation: avatar_gender?.toLowerCase() === 'female' ? 'f_idle_01' : 'm_idle_01'
-            });
         }
 
         const cleanFullText = fullText
