@@ -72,7 +72,7 @@ export class AIService {
     }
 
     private initFaissDaemon() {
-        const scriptPath = path.join(__dirname, '../../scripts/query_faiss.py');
+        const scriptPath = path.join(__dirname, '../../../scripts/query_faiss.py');
         this.faissProcess = spawn('python', [scriptPath, '--daemon']);
         
         let buffer = '';
