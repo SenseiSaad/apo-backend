@@ -107,14 +107,40 @@ export class AssistantService {
         return result;
     }
 
+    async assignCareRequestToDoctor(userId: string, careRequestId: string, doctorId: string, force?: boolean) {
+        const assignmentContext = await careRequestService.assertAssistantCanAssignClaimedRequest(careRequestId, userId);
+
+        return patientAssignmentService.assignPatientToDoctor({
+            patientId: assignmentContext.patient_id,
+            doctorId,
+            actorUserId: userId,
+            source: 'assistant',
+            force,
+            allowedDoctorIds: assignmentContext.allowed_doctor_ids
+        });
+    }
+
+    async getAssignableDoctors(userId: string) {
+        return careRequestService.listAssignableDoctorsForAssistant(userId);
+    }
+
     async getCareRequests(userId: string, query: {
         page: number;
         limit: number;
         search?: string;
         status?: any;
+        queue?: 'unclaimed' | 'mine' | 'pending_assignment' | 'all';
     }) {
         const allowedDoctorIds = await careRequestService.assertAssistantCanTriage(userId);
-        return careRequestService.listRequests(query, allowedDoctorIds);
+        return careRequestService.listRequests(query, allowedDoctorIds, userId);
+    }
+
+    async claimCareRequest(userId: string, careRequestId: string) {
+        return careRequestService.claimForAssistant(careRequestId, userId);
+    }
+
+    async releaseCareRequest(userId: string, careRequestId: string) {
+        return careRequestService.releaseAssistantClaim(careRequestId, userId);
     }
 
     async updateCareRequestTriage(userId: string, careRequestId: string, data: {
@@ -122,7 +148,7 @@ export class AssistantService {
         triage_notes?: string;
     }) {
         await careRequestService.assertAssistantCanTriage(userId);
-        return careRequestService.updateTriage(careRequestId, userId, data);
+        return careRequestService.updateTriage(careRequestId, userId, data, { requireClaimBy: userId });
     }
 
     async getBookings(_userId: string) {

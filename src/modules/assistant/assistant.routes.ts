@@ -21,13 +21,30 @@ router.use(requireRole([Role.ASSISTANT]));
 
 router.get('/me', assistantController.me.bind(assistantController));
 router.get('/doctors', assistantController.getDoctors.bind(assistantController));
+router.get('/assignable-doctors', assistantController.getAssignableDoctors.bind(assistantController));
 router.get('/patients', assistantController.getPatients.bind(assistantController));
 router.get('/care-requests', validate(assistantCareRequestsQuerySchema, 'query'), assistantController.getCareRequests.bind(assistantController));
+router.post(
+    '/care-requests/:careRequestId/claim',
+    validate(AssistantCareRequestIdParamSchema, 'params'),
+    assistantController.claimCareRequest.bind(assistantController)
+);
+router.post(
+    '/care-requests/:careRequestId/release',
+    validate(AssistantCareRequestIdParamSchema, 'params'),
+    assistantController.releaseCareRequest.bind(assistantController)
+);
 router.patch(
     '/care-requests/:careRequestId/triage',
     validate(AssistantCareRequestIdParamSchema, 'params'),
     validate(updateAssistantCareRequestTriageSchema),
     assistantController.updateCareRequestTriage.bind(assistantController)
+);
+router.post(
+    '/care-requests/:careRequestId/assign-doctor',
+    validate(AssistantCareRequestIdParamSchema, 'params'),
+    validate(assignAssistantPatientDoctorSchema),
+    assistantController.assignCareRequestToDoctor.bind(assistantController)
 );
 router.get('/patients/:patientId', validate(AssistantPatientIdParamSchema, 'params'), assistantController.getPatient.bind(assistantController));
 router.post(

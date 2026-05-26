@@ -36,7 +36,8 @@ export const assistantCareRequestsQuerySchema = z.object({
         z.number().int().min(1).max(200).optional().default(20)
     ),
     search: z.string().trim().min(1).max(100).optional(),
-    status: z.enum(['open', 'new_request', 'triage_in_progress', 'pending_assignment', 'assigned', 'patient_requested_closure']).optional()
+    status: z.enum(['open', 'new_request', 'triage_claimed', 'triage_in_progress', 'pending_assignment', 'assigned', 'patient_requested_closure']).optional(),
+    queue: z.enum(['unclaimed', 'mine', 'pending_assignment', 'all']).optional().default('unclaimed')
 });
 
 export const updateAssistantCareRequestTriageSchema = z.object({

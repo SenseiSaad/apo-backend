@@ -2,6 +2,7 @@ import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type CareRequestStatus =
     | 'new_request'
+    | 'triage_claimed'
     | 'triage_in_progress'
     | 'pending_assignment'
     | 'assigned'
@@ -18,6 +19,10 @@ export interface ICareRequest extends Document {
     _id: mongoose.Types.ObjectId;
     patient_id: mongoose.Types.ObjectId;
     doctor_id?: mongoose.Types.ObjectId;
+    claimed_by?: mongoose.Types.ObjectId;
+    claimed_assistant_id?: mongoose.Types.ObjectId;
+    claimed_at?: Date;
+    claim_expires_at?: Date;
     assigned_by?: mongoose.Types.ObjectId;
     assigned_at?: Date;
     reason: string;
@@ -42,6 +47,10 @@ const CareRequestSchema = new Schema<ICareRequest>(
     {
         patient_id: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
         doctor_id: { type: Schema.Types.ObjectId, ref: 'Doctor', index: true },
+        claimed_by: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+        claimed_assistant_id: { type: Schema.Types.ObjectId, ref: 'Assistant' },
+        claimed_at: { type: Date },
+        claim_expires_at: { type: Date, index: true },
         assigned_by: { type: Schema.Types.ObjectId, ref: 'User' },
         assigned_at: { type: Date },
         reason: { type: String, required: true, maxlength: 2000 },
@@ -56,6 +65,7 @@ const CareRequestSchema = new Schema<ICareRequest>(
             type: String,
             enum: [
                 'new_request',
+                'triage_claimed',
                 'triage_in_progress',
                 'pending_assignment',
                 'assigned',
@@ -89,6 +99,7 @@ const CareRequestSchema = new Schema<ICareRequest>(
 
 CareRequestSchema.index({ patient_id: 1, status: 1 });
 CareRequestSchema.index({ doctor_id: 1, status: 1 });
+CareRequestSchema.index({ status: 1, claimed_by: 1, claim_expires_at: 1 });
 CareRequestSchema.index({ created_at: -1 });
 
 export const CareRequest: Model<ICareRequest> = mongoose.models.CareRequest || mongoose.model<ICareRequest>('CareRequest', CareRequestSchema);

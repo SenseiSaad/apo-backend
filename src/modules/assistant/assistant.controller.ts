@@ -62,6 +62,28 @@ export class AssistantController {
         }
     }
 
+    async assignCareRequestToDoctor(
+        req: AuthRequest<AssistantCareRequestIdParamInput, Record<string, never>, AssignAssistantPatientDoctorInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.assignCareRequestToDoctor(req.user!.user_id, req.params.careRequestId, req.body.doctor_id, req.body.force);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getAssignableDoctors(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await assistantService.getAssignableDoctors(req.user!.user_id);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getCareRequests(
         req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, AssistantCareRequestsQueryInput>,
         res: Response,
@@ -82,6 +104,32 @@ export class AssistantController {
     ): Promise<void> {
         try {
             const result = await assistantService.updateCareRequestTriage(req.user!.user_id, req.params.careRequestId, req.body);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async claimCareRequest(
+        req: AuthRequest<AssistantCareRequestIdParamInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.claimCareRequest(req.user!.user_id, req.params.careRequestId);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async releaseCareRequest(
+        req: AuthRequest<AssistantCareRequestIdParamInput>,
+        res: Response,
+        next: NextFunction
+    ): Promise<void> {
+        try {
+            const result = await assistantService.releaseCareRequest(req.user!.user_id, req.params.careRequestId);
             res.json({ success: true, data: result });
         } catch (error) {
             next(error);

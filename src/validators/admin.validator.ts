@@ -188,6 +188,7 @@ export const getCareRequestsQuerySchema = z.object({
         'open',
         'closed',
         'new_request',
+        'triage_claimed',
         'triage_in_progress',
         'pending_assignment',
         'assigned',
