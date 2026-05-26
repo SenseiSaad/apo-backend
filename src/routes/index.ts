@@ -9,6 +9,7 @@ import AssistantRoutes from '../modules/assistant/assistant.routes';
 import streamojiRoutes from '../modules/streamoji/streamoji.routes';
 import avatarLibraryRoutes from '../modules/avatarLibrary/avatarLibrary.routes';
 import avatarViewerRoutes from '../modules/avatarViewer/avatarViewer.routes';
+import triageChatRoutes from '../modules/triageChat/triageChat.routes';
 
 const router = Router();
 
@@ -51,6 +52,9 @@ router.use('/avatar-library', avatarLibraryRoutes);
 
 // Hosted avatar viewer session routes
 router.use('/avatar-viewer', avatarViewerRoutes);
+
+// Realtime triage chat REST fallback/history routes
+router.use('/triage-chat', triageChatRoutes);
 // TODO: Add more routes as modules are built
 // router.use('/sessions', authenticate, sessionRoutes);
 // router.use('/content', authenticate, contentRoutes);

@@ -647,6 +647,8 @@ export class CareRequestService {
         await request.save();
 
         if (data.status && closedRequestStatuses.includes(data.status)) {
+            const { triageChatService } = await import('../modules/triageChat/triageChat.service');
+            await triageChatService.closeConversationForCareRequest(request._id.toString(), actorUserId, `Care request marked ${data.status}. Triage chat closed.`);
             await Patient.findByIdAndUpdate(request.patient_id, {
                 $set: {
                     care_status: 'treated',
@@ -744,7 +746,7 @@ export class CareRequestService {
         }).sort({ created_at: -1 });
 
         if (!request) {
-            return;
+            return null;
         }
 
         request.doctor_id = new mongoose.Types.ObjectId(doctorId);
@@ -756,6 +758,7 @@ export class CareRequestService {
         request.claimed_at = undefined;
         request.claim_expires_at = undefined;
         await request.save();
+        return request._id.toString();
     }
 
     private async markPatientNeedsCare(patient: any, reason: string) {

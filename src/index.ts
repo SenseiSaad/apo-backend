@@ -1,9 +1,10 @@
 import 'dotenv/config';
 import './config/newrelic';
-import app from './app';
+import app, { allowedOrigins } from './app';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
 import { avatarViewerService } from './modules/avatarViewer/avatarViewer.service';
+import { triageChatSocketService } from './modules/triageChat/triageChat.socket';
 
 const PORT = process.env.PORT || 5000;
 
@@ -29,11 +30,13 @@ async function bootstrap() {
         });
 
         avatarViewerService.attachWebSocketServer(server);
+        triageChatSocketService.attach(server, allowedOrigins);
 
         // Graceful shutdown
         const shutdown = async (signal: string) => {
             logger.info(`Received ${signal}. Starting graceful shutdown...`);
             avatarViewerService.shutdownWebSockets();
+            triageChatSocketService.shutdown();
             server.close(async () => {
                 const mongoose = await import('mongoose');
                 await mongoose.disconnect();

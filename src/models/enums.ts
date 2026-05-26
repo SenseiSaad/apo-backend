@@ -65,6 +65,8 @@ export enum NotificationType {
     SESSION_REMINDER = 'session_reminder',
     STREAK_ALERT = 'streak_alert',
     DOCTOR_MESSAGE = 'doctor_message',
+    TRIAGE_MESSAGE = 'triage_message',
+    CARE_REQUEST = 'care_request',
     CRISIS = 'crisis'
 }
 

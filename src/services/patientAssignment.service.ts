@@ -5,6 +5,7 @@ import { User } from '../models/User.model';
 import { Role, UserStatus } from '../models/enums';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
 import { careRequestService } from './careRequest.service';
+import { triageChatService } from '../modules/triageChat/triageChat.service';
 
 type CareStatus = 'needs_care' | 'assigned' | 'in_treatment' | 'treated' | 'inactive';
 type AssignmentSource = 'admin' | 'assistant' | 'invite' | 'system';
@@ -197,7 +198,14 @@ export class PatientAssignmentService {
         patient.care_status = 'assigned';
         patient.care_status_updated_at = new Date();
         await patient.save();
-        await careRequestService.syncAssignment(patient._id.toString(), doctor._id.toString(), input.actorUserId);
+        const careRequestId = await careRequestService.syncAssignment(patient._id.toString(), doctor._id.toString(), input.actorUserId);
+        if (careRequestId) {
+            await triageChatService.closeConversationForCareRequest(
+                careRequestId,
+                input.actorUserId,
+                'Patient assigned to Doctor. Triage chat closed and preserved for handoff.'
+            );
+        }
 
         return {
             message: currentDoctorId ? 'Patient reassigned to Doctor successfully' : 'Patient assigned to Doctor successfully',

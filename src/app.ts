@@ -47,7 +47,7 @@ app.use((req, res, next) => {
     return helmet()(req, res, next);
 });
 
-const allowedOrigins = [
+export const allowedOrigins = [
     'https://apothecary-frontend.vercel.app',
     'https://Apothecary-app-frontend.vercel.app',
     process.env.CLIENT_URL,
