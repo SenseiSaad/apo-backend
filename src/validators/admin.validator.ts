@@ -228,7 +228,15 @@ export const getPatientsQuerySchema = z.object({
 });
 
 export const updateCareRequestTriageSchema = z.object({
-    status: z.enum(['triage_in_progress', 'pending_assignment', 'cancelled']).optional(),
+    status: z.enum([
+        'triage_in_progress',
+        'pending_assignment',
+        'cancelled',
+        'completed',
+        'closed_by_patient',
+        'referred_out',
+        'not_appropriate_for_platform'
+    ]).optional(),
     triage_notes: z.string().trim().max(4000).optional()
 }).refine(
     data => Object.keys(data).length > 0,

@@ -612,7 +612,7 @@ export class CareRequestService {
     }
 
     async updateTriage(requestId: string, actorUserId: string, data: {
-        status?: 'triage_in_progress' | 'pending_assignment' | 'cancelled';
+        status?: 'triage_in_progress' | 'pending_assignment' | 'cancelled' | 'completed' | 'closed_by_patient' | 'referred_out' | 'not_appropriate_for_platform';
         triage_notes?: string;
     }, options?: {
         requireClaimBy?: string;
@@ -633,15 +633,38 @@ export class CareRequestService {
         if (data.triage_notes !== undefined) {
             request.triage_notes = data.triage_notes;
         }
-        if (data.status === 'cancelled') {
+        if (data.status && closedRequestStatuses.includes(data.status)) {
             request.closed_at = new Date();
             request.closed_by = new mongoose.Types.ObjectId(actorUserId);
+            if (['completed', 'referred_out', 'not_appropriate_for_platform'].includes(data.status)) {
+                request.outcome = data.status as any;
+            }
             request.claimed_by = undefined;
             request.claimed_assistant_id = undefined;
             request.claimed_at = undefined;
             request.claim_expires_at = undefined;
         }
         await request.save();
+
+        if (data.status && closedRequestStatuses.includes(data.status)) {
+            await Patient.findByIdAndUpdate(request.patient_id, {
+                $set: {
+                    care_status: 'treated',
+                    care_status_updated_at: new Date()
+                },
+                $unset: {
+                    doctor_id: '',
+                    doctor_assigned_at: ''
+                }
+            });
+        } else if (data.status === 'pending_assignment' || data.status === 'triage_in_progress') {
+            await Patient.findByIdAndUpdate(request.patient_id, {
+                $set: {
+                    care_status: request.doctor_id ? 'assigned' : 'needs_care',
+                    care_status_updated_at: new Date()
+                }
+            });
+        }
 
         return {
             message: 'Care request updated',
