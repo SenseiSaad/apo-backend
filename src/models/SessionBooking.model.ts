@@ -8,6 +8,7 @@ export interface ISessionBooking extends Document {
     scheduled_at: Date;
     duration_mins: number;
     status: SessionStatus;
+    mode: 'video' | 'text' | 'either';
     video_link?: string;
     stripe_payment_id?: string;
     notes?: string; // Encrypted, Doctor only
@@ -22,6 +23,7 @@ const SessionBookingSchema = new Schema<ISessionBooking>(
         scheduled_at: { type: Date, required: true },
         duration_mins: { type: Number, default: 50 },
         status: { type: String, enum: Object.values(SessionStatus), default: SessionStatus.PENDING },
+        mode: { type: String, enum: ['video', 'text', 'either'], default: 'video' },
         video_link: { type: String },
         stripe_payment_id: { type: String },
         notes: { type: String } // Encrypted

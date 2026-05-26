@@ -45,6 +45,8 @@ export enum ActivityType {
 }
 
 export enum SessionStatus {
+    AVAILABLE = 'available',
+    REQUESTED = 'requested',
     PENDING = 'pending',
     CONFIRMED = 'confirmed',
     CANCELLED = 'cancelled',

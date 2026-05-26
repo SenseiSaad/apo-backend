@@ -102,11 +102,16 @@ export type CompleteTreatmentInput = z.infer<typeof completeTreatmentSchema>;
 export type UpdateDoctorAssistantInput = z.infer<typeof updateDoctorAssistantSchema>;
 
 export const generateDoctorSlotsSchema = z.object({
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD'),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD').optional(),
+    dates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD')).min(1).max(62).optional(),
     start_time: hhmmSchema,
     end_time: hhmmSchema,
-    timezone: z.string().trim().min(2).max(100).optional()
-});
+    timezone: z.string().trim().min(2).max(100).optional(),
+    mode: z.enum(['video', 'text', 'either']).optional().default('video')
+}).refine(
+    data => Boolean(data.date || data.dates?.length),
+    { message: 'Either date or dates is required' }
+);
 export type GenerateDoctorSlotsInput = z.infer<typeof generateDoctorSlotsSchema>;
 
 export const getDoctorSlotsQuerySchema = z.object({

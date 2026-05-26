@@ -6,7 +6,7 @@ import { User } from '../../models/User.model';
 import { InviteToken } from '../../models/InviteToken.model';
 import { Patient } from '../../models/Patient.model';
 import { Assistant as AssistantModel } from '../../models/Assistant.model';
-import { Role, Tier, UserStatus } from '../../models/enums';
+import { Role, SessionStatus, Tier, UserStatus } from '../../models/enums';
 import { decrypt, encrypt } from '../../utils/encryption';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
 import { emailService } from '../../services/email.service';
@@ -39,64 +39,75 @@ export class DoctorService {
         const session_duration = doctor.portal_settings?.default_session_duration_mins || 50;
         const break_duration = 10; // 10 minutes between sessions
         const total_slot_duration = session_duration + break_duration;
+        const dates = [...new Set([...(input.dates || []), ...(input.date ? [input.date] : [])])].sort();
+        const slotsToCreate: Array<{
+            doctor_id: mongoose.Types.ObjectId;
+            scheduled_at: Date;
+            duration_mins: number;
+            status: SessionStatus;
+            mode: 'video' | 'text' | 'either';
+        }> = [];
+        const results: Record<string, number> = {};
 
-        // Create start and end Dates based on the specific date and time in the given timezone
-        const startTimeStr = `${input.date}T${input.start_time}:00`;
-        const endTimeStr = `${input.date}T${input.end_time}:00`;
+        for (const date of dates) {
+            const startZoned = fromZonedTime(`${date}T${input.start_time}:00`, tz);
+            const endZoned = fromZonedTime(`${date}T${input.end_time}:00`, tz);
 
-        const startZoned = fromZonedTime(startTimeStr, tz);
-        const endZoned = fromZonedTime(endTimeStr, tz);
-
-        if (!isAfter(endZoned, startZoned)) {
-            throw new BadRequestError('End time must be after start time');
-        }
-
-        const slotsToCreate = [];
-        let currentSlotStart = startZoned;
-        
-        while (true) {
-            const currentSlotEnd = addMinutes(currentSlotStart, session_duration);
-            if (isAfter(currentSlotEnd, endZoned)) {
-                break; // This slot exceeds the end time
+            if (!isAfter(endZoned, startZoned)) {
+                throw new BadRequestError(`End time must be after start time for ${date}`);
             }
 
-            // Check if slot overlaps with existing booking
-            const overlap = await SessionBooking.findOne({
-                doctor_id: doctor._id,
-                status: { $in: ['available', 'requested', 'pending', 'confirmed'] },
-                $or: [
-                    {
-                        scheduled_at: { $lt: currentSlotEnd },
-                        $expr: {
-                            $gt: [
-                                { $dateAdd: { startDate: "$scheduled_at", unit: "minute", amount: "$duration_mins" } },
-                                currentSlotStart
-                            ]
-                        }
-                    }
-                ]
-            });
+            results[date] = 0;
+            let currentSlotStart = startZoned;
 
-            if (!overlap) {
-                slotsToCreate.push({
+            while (true) {
+                const currentSlotEnd = addMinutes(currentSlotStart, session_duration);
+                if (isAfter(currentSlotEnd, endZoned)) {
+                    break;
+                }
+
+                const overlap = await SessionBooking.findOne({
                     doctor_id: doctor._id,
-                    scheduled_at: currentSlotStart,
-                    duration_mins: session_duration,
-                    status: 'available',
-                    mode: 'video'
+                    status: {
+                        $in: [
+                            SessionStatus.AVAILABLE,
+                            SessionStatus.REQUESTED,
+                            SessionStatus.PENDING,
+                            SessionStatus.CONFIRMED
+                        ]
+                    },
+                    scheduled_at: { $lt: currentSlotEnd },
+                    $expr: {
+                        $gt: [
+                            { $dateAdd: { startDate: '$scheduled_at', unit: 'minute', amount: '$duration_mins' } },
+                            currentSlotStart
+                        ]
+                    }
                 });
-            }
 
-            currentSlotStart = addMinutes(currentSlotStart, total_slot_duration);
+                if (!overlap) {
+                    slotsToCreate.push({
+                        doctor_id: doctor._id,
+                        scheduled_at: currentSlotStart,
+                        duration_mins: session_duration,
+                        status: SessionStatus.AVAILABLE,
+                        mode: input.mode || 'video'
+                    });
+                    results[date] += 1;
+                }
+
+                currentSlotStart = addMinutes(currentSlotStart, total_slot_duration);
+            }
         }
 
         if (slotsToCreate.length > 0) {
-            await SessionBooking.insertMany(slotsToCreate);
+            await SessionBooking.insertMany(slotsToCreate, { ordered: false });
         }
 
         return {
             generated_slots: slotsToCreate.length,
-            date: input.date
+            dates,
+            results
         };
     }
 
