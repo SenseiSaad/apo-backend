@@ -55,3 +55,15 @@ export type CreateCareRequestInput = z.infer<typeof createCareRequestSchema>;
 export type AssignAvatarInput = z.infer<typeof assignAvatarSchema>;
 export type DoctorRequestInput = z.infer<typeof DoctorRequestSchema>;
 export type PatientInviteIdParamInput = z.infer<typeof patientInviteIdParamSchema>;
+
+export const getDoctorSlotsSchema = z.object({
+    start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'start_date must be YYYY-MM-DD'),
+    end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'end_date must be YYYY-MM-DD'),
+    timezone: z.string().trim().min(2).max(100).optional()
+});
+export type GetDoctorSlotsInput = z.infer<typeof getDoctorSlotsSchema>;
+
+export const DoctorIdParamSchema = z.object({
+    doctorId: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid Doctor ID')
+});
+

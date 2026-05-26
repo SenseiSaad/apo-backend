@@ -13,8 +13,78 @@ import { careRequestService } from '../../services/careRequest.service';
 import { NotFoundError, BadRequestError, ForbiddenError, ConflictError } from '../../utils/errors';
 import { Tier } from '../../models/enums';
 import { logger } from '../../utils/logger';
+import { toZonedTime, formatInTimeZone, fromZonedTime } from 'date-fns-tz';
+import { addMinutes, isBefore, isAfter, parseISO } from 'date-fns';
 
 export class PatientService {
+    async getDoctorSlots(doctorId: string, start_date_str: string, end_date_str: string, patient_timezone: string) {
+        const Doctor = await DoctorModel.findById(doctorId);
+        if (!Doctor) throw new NotFoundError('Doctor not found');
+
+        const slots: Array<{ start_time: Date, end_time: Date }> = [];
+        const session_duration = Doctor.portal_settings?.default_session_duration_mins || 50;
+
+        const startDate = new Date(`${start_date_str}T00:00:00Z`);
+        const endDate = new Date(`${end_date_str}T23:59:59Z`);
+        
+        for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+            const dayOfWeek = d.getUTCDay();
+            const rules = Doctor.availability.filter(a => a.day_of_week === dayOfWeek && a.is_available !== false);
+            
+            for (const rule of rules) {
+                const tz = rule.timezone || 'UTC';
+                const dateString = d.toISOString().split('T')[0];
+                const startTimeStr = `${dateString}T${rule.start_time}:00`;
+                const endTimeStr = `${dateString}T${rule.end_time}:00`;
+
+                const startZoned = fromZonedTime(startTimeStr, tz);
+                const endZoned = fromZonedTime(endTimeStr, tz);
+
+                let currentSlotStart = startZoned;
+                while (true) {
+                    const currentSlotEnd = addMinutes(currentSlotStart, session_duration);
+                    if (isAfter(currentSlotEnd, endZoned)) {
+                        break;
+                    }
+                    
+                    if (isAfter(currentSlotStart, new Date())) {
+                        slots.push({
+                            start_time: currentSlotStart,
+                            end_time: currentSlotEnd
+                        });
+                    }
+                    
+                    // Increment by 60 minutes for clean hour boundaries
+                    currentSlotStart = addMinutes(currentSlotStart, 60);
+                }
+            }
+        }
+
+        const existingBookings = await SessionBooking.find({
+            doctor_id: doctorId,
+            status: { $in: ['pending', 'confirmed'] },
+            scheduled_at: { $gte: startDate, $lte: endDate }
+        });
+
+        const availableSlots = slots.filter(slot => {
+            for (const booking of existingBookings) {
+                const bookingStart = booking.scheduled_at;
+                const bookingEnd = addMinutes(bookingStart, booking.duration_mins);
+                if (isBefore(slot.start_time, bookingEnd) && isAfter(slot.end_time, bookingStart)) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        availableSlots.sort((a, b) => a.start_time.getTime() - b.start_time.getTime());
+
+        return availableSlots.map(s => ({
+            start_time: s.start_time.toISOString(),
+            end_time: s.end_time.toISOString()
+        }));
+    }
+
     /**
      * Get patient profile with Doctor and tier info
      */

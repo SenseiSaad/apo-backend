@@ -7,10 +7,24 @@ import {
     CreateCareRequestInput,
     AssignAvatarInput,
     DoctorRequestInput,
-    PatientInviteIdParamInput
+    PatientInviteIdParamInput,
+    GetDoctorSlotsInput
 } from '../../validators/patient.validator';
 
 export class PatientController {
+    /**
+     * GET /patient/doctors/:doctorId/slots
+     */
+    async getDoctorSlots(req: AuthRequest<any, any, any, GetDoctorSlotsInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const { doctorId } = req.params;
+            const { start_date, end_date, timezone } = req.query;
+            const result = await patientService.getDoctorSlots(doctorId, start_date, end_date, timezone || 'UTC');
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
     /**
      * GET /patient/profile
      */

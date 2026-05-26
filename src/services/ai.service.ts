@@ -10,13 +10,13 @@ import { avatarViewerService } from '../modules/avatarViewer/avatarViewer.servic
 const execFilePromise = util.promisify(execFile);
 
 const MALE_IDLE_ANIMATIONS = [
-    'm_idle_01', 'm_idle_02', 'm_idle_var_01', 'm_idle_var_02', 'm_idle_var_03', 
-    'm_idle_var_04', 'm_idle_var_05', 'm_idle_var_06', 'm_idle_var_07', 
+    'm_idle_01', 'm_idle_02', 'm_idle_var_01', 'm_idle_var_02', 'm_idle_var_03',
+    'm_idle_var_04', 'm_idle_var_05', 'm_idle_var_06', 'm_idle_var_07',
     'm_idle_var_08', 'm_idle_var_09', 'm_idle_var_10'
 ];
 
 const FEMALE_IDLE_ANIMATIONS = [
-    'f_idle_01', 'f_idle_var_01', 'f_idle_var_02', 'f_idle_var_03', 'f_idle_var_04', 
+    'f_idle_01', 'f_idle_var_01', 'f_idle_var_02', 'f_idle_var_03', 'f_idle_var_04',
     'f_idle_var_05', 'f_idle_var_06', 'f_idle_var_07', 'f_idle_var_08', 'f_idle_var_09',
     ...MALE_IDLE_ANIMATIONS
 ];
@@ -33,7 +33,7 @@ const FEMALE_TALK_ANIMATIONS = [
 
 function getRandomAnimation(gender: string = 'male', type: 'idle' | 'talk'): string {
     const isFemale = gender.toLowerCase() === 'female';
-    const list = type === 'idle' 
+    const list = type === 'idle'
         ? (isFemale ? FEMALE_IDLE_ANIMATIONS : MALE_IDLE_ANIMATIONS)
         : (isFemale ? FEMALE_TALK_ANIMATIONS : MALE_TALK_ANIMATIONS);
     return list[Math.floor(Math.random() * list.length)];
@@ -67,14 +67,14 @@ export class AIService {
         } else {
             logger.warn('GROQ_API_KEY is not set. AI Service will use mock responses.');
         }
-        
+
         this.initFaissDaemon();
     }
 
     private initFaissDaemon() {
         const scriptPath = path.join(__dirname, '../../../scripts/query_faiss.py');
         this.faissProcess = spawn('python', [scriptPath, '--daemon']);
-        
+
         let buffer = '';
 
         this.faissProcess.stdout?.on('data', (data) => {
@@ -202,7 +202,7 @@ Format exactly like this:
         const is_crisis = this.detectCrisis(message);
         if (is_crisis) {
             const crisisResponse = "I'm very concerned about what you've shared. Your safety is the top priority. Please reach out to the 988 Suicide & Crisis Lifeline immediately by calling or texting 988. They have trained Assistants available 24/7. I also strongly encourage you to contact your Doctor right away.";
-            
+
             if (patient_context?.patient_id) {
                 // Note: We do NOT create a notification here because ai.service has no
                 // access to the doctor's user_id. The full crisis alert (to the doctor)
@@ -264,15 +264,15 @@ Format exactly like this:
 
                 const content = chunk.choices[0]?.delta?.content || "";
                 fullText += content;
-                
+
                 if (!commandExtracted) {
                     tagBuffer += content;
-                    
+
                     if (tagBuffer.toLowerCase().includes('</animation>')) {
                         commandExtracted = true;
                         const expMatch = tagBuffer.match(/<expression>(.*?)<\/expression>/i);
                         const animMatch = tagBuffer.match(/<animation>(.*?)<\/animation>/i);
-                        
+
                         const expression = expMatch ? expMatch[1] : 'calm';
                         const animationTag = animMatch ? animMatch[1] : 'talk';
                         let animation = animationTag;
@@ -306,7 +306,7 @@ Format exactly like this:
                         }
                     } else if (tagBuffer.length > 150 && !tagBuffer.toLowerCase().includes('<expression>')) {
                         commandExtracted = true;
-                        
+
                         // FALLBACK: The LLM forgot the tags. Force the avatar to talk so it isn't frozen.
                         avatarViewerService.sendCommandFromToken(viewerToken, {
                             type: 'state',
@@ -315,7 +315,7 @@ Format exactly like this:
                             playOnce: true,
                             returnTo: avatar_gender?.toLowerCase() === 'female' ? 'f_idle_01' : 'm_idle_01'
                         }).catch(e => logger.warn(`Avatar fallback failed: ${e.message}`));
-                        
+
                         if (onChunk && tagBuffer) onChunk(tagBuffer);
                     }
                 } else {

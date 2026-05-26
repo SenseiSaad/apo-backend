@@ -9,8 +9,11 @@ import {
     createCareRequestSchema,
     assignAvatarSchema,
     DoctorRequestSchema,
-    patientInviteIdParamSchema
+    patientInviteIdParamSchema,
+    getDoctorSlotsSchema,
+    DoctorIdParamSchema
 } from '../../validators/patient.validator';
+
 
 const router = Router();
 
@@ -22,6 +25,14 @@ router.use(requireRole([Role.PATIENT]));
 router.get('/profile', patientController.getProfile.bind(patientController));
 router.patch('/profile', validate(updateProfileSchema), patientController.updateProfile.bind(patientController));
 router.patch('/care-status', validate(updateCareStatusSchema), patientController.updateCareStatus.bind(patientController));
+
+// Doctor Slots
+router.get(
+    '/doctors/:doctorId/slots',
+    validate(DoctorIdParamSchema, 'params'),
+    validate(getDoctorSlotsSchema, 'query'),
+    patientController.getDoctorSlots.bind(patientController)
+);
 router.get('/care-requests', patientController.getCareRequests.bind(patientController));
 router.post('/care-requests', validate(createCareRequestSchema), patientController.createCareRequest.bind(patientController));
 router.post('/care-requests/request-closure', patientController.requestCareClosure.bind(patientController));
