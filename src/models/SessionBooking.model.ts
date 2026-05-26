@@ -3,7 +3,7 @@ import { SessionStatus } from './enums';
 
 export interface ISessionBooking extends Document {
     _id: mongoose.Types.ObjectId;
-    patient_id: mongoose.Types.ObjectId;
+    patient_id?: mongoose.Types.ObjectId;
     doctor_id: mongoose.Types.ObjectId;
     scheduled_at: Date;
     duration_mins: number;
@@ -17,7 +17,7 @@ export interface ISessionBooking extends Document {
 
 const SessionBookingSchema = new Schema<ISessionBooking>(
     {
-        patient_id: { type: Schema.Types.ObjectId, ref: 'Patient', required: true },
+        patient_id: { type: Schema.Types.ObjectId, ref: 'Patient' },
         doctor_id: { type: Schema.Types.ObjectId, ref: 'Doctor', required: true },
         scheduled_at: { type: Date, required: true },
         duration_mins: { type: Number, default: 50 },

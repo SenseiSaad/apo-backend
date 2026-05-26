@@ -13,7 +13,9 @@ import {
     updateDoctorAssistantSchema,
     updateDoctorPersonalInfoSchema,
     updateDoctorProfessionalInfoSchema,
-    updateDoctorSettingsSchema
+    updateDoctorSettingsSchema,
+    generateDoctorSlotsSchema,
+    getDoctorSlotsQuerySchema
 } from '../../validators/doctor.validator';
 
 const router = Router();
@@ -26,6 +28,10 @@ router.patch('/profile/personal', validate(updateDoctorPersonalInfoSchema), doct
 router.patch('/profile/professional', validate(updateDoctorProfessionalInfoSchema), doctorController.updateProfessionalInfo.bind(doctorController));
 router.put('/availability', validate(updateDoctorAvailabilitySchema), doctorController.updateAvailability.bind(doctorController));
 router.patch('/settings', validate(updateDoctorSettingsSchema), doctorController.updateSettings.bind(doctorController));
+
+router.post('/slots/generate', validate(generateDoctorSlotsSchema), doctorController.generateSlots.bind(doctorController));
+router.get('/slots', validate(getDoctorSlotsQuerySchema, 'query'), doctorController.getSlots.bind(doctorController));
+
 router.post('/patient-invites', validate(invitePatientSchema), doctorController.invitePatient.bind(doctorController));
 router.get('/patient-invites', doctorController.getPatientInvites.bind(doctorController));
 router.get('/patients', doctorController.getPatients.bind(doctorController));

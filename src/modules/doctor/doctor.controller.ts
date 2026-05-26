@@ -11,10 +11,30 @@ import {
     UpdateDoctorAvailabilityInput,
     UpdateDoctorPersonalInfoInput,
     UpdateDoctorProfessionalInfoInput,
-    UpdateDoctorSettingsInput
+    UpdateDoctorSettingsInput,
+    GenerateDoctorSlotsInput,
+    GetDoctorSlotsQueryInput
 } from '../../validators/doctor.validator';
 
 export class DoctorController {
+    async generateSlots(req: AuthRequest<any, any, GenerateDoctorSlotsInput, any>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await doctorService.generateSlots(req.user!.user_id, req.body);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    async getSlots(req: AuthRequest<any, any, any, GetDoctorSlotsQueryInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await doctorService.getSlots(req.user!.user_id, req.query);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getProfile(req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await doctorService.getProfile(req.user!.user_id);
