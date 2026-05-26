@@ -266,7 +266,10 @@ export class CareRequestService {
         const total = result?.total?.[0]?.count || 0;
 
         return {
-            care_requests: (result?.data || []).map((request: any) => this.formatRequest(request)),
+            care_requests: (result?.data || []).map((request: any) => ({
+                ...this.formatRequest(request),
+                is_claimed_by_me: Boolean(actorUserId && request.claimed_by?.toString() === actorUserId && !this.isClaimExpired(request))
+            })),
             pagination: {
                 page,
                 limit,
@@ -443,27 +446,66 @@ export class CareRequestService {
             throw new NotFoundError('Assistant profile not found');
         }
 
-        const request = await CareRequest.findById(requestId).populate('claimed_by', 'email');
-        if (!request) {
+        const requestObjectId = new mongoose.Types.ObjectId(requestId);
+        const assistantUserObjectId = new mongoose.Types.ObjectId(assistantUserId);
+        const allowedDoctorObjectIds = allowedDoctorIds.map(id => new mongoose.Types.ObjectId(id));
+        const now = new Date();
+        const claimExpiresAt = this.getClaimExpiry();
+
+        const existingRequest = await CareRequest.findById(requestObjectId).populate('claimed_by', 'email');
+        if (!existingRequest) {
             throw new NotFoundError('Care request not found');
         }
 
-        this.assertRequestInAssistantScope(request, allowedDoctorIds);
-        this.assertRequestIsOpen(request.status);
+        this.assertRequestInAssistantScope(existingRequest, allowedDoctorIds);
+        this.assertRequestIsOpen(existingRequest.status);
 
-        if (request.claimed_by && !this.isClaimExpired(request) && request.claimed_by.toString() !== assistantUserId) {
-            const owner = request.claimed_by as any;
-            throw new ConflictError(`This request is already claimed by ${owner.email || 'another assistant'}`);
-        }
+        const claimedRequest = await CareRequest.findOneAndUpdate(
+            {
+                _id: requestObjectId,
+                status: { $in: openRequestStatuses },
+                $and: [
+                    {
+                        $or: [
+                            { doctor_id: { $in: allowedDoctorObjectIds } },
+                            { doctor_id: { $exists: false } },
+                            { doctor_id: null }
+                        ]
+                    },
+                    {
+                        $or: [
+                            { claimed_by: { $exists: false } },
+                            { claimed_by: null },
+                            { claimed_by: assistantUserObjectId },
+                            { claim_expires_at: { $lte: now } }
+                        ]
+                    }
+                ]
+            },
+            [
+                {
+                    $set: {
+                        claimed_by: assistantUserObjectId,
+                        claimed_assistant_id: assistant._id,
+                        claimed_at: now,
+                        claim_expires_at: claimExpiresAt,
+                        status: {
+                            $cond: [{ $eq: ['$status', 'new_request'] }, 'triage_claimed', '$status']
+                        }
+                    }
+                }
+            ],
+            { new: true }
+        );
 
-        request.claimed_by = new mongoose.Types.ObjectId(assistantUserId);
-        request.claimed_assistant_id = assistant._id;
-        request.claimed_at = new Date();
-        request.claim_expires_at = this.getClaimExpiry();
-        if (request.status === 'new_request') {
-            request.status = 'triage_claimed';
+        if (!claimedRequest) {
+            const currentRequest = await CareRequest.findById(requestObjectId).populate('claimed_by', 'email');
+            if (currentRequest?.claimed_by && !this.isClaimExpired(currentRequest)) {
+                const owner = currentRequest.claimed_by as any;
+                throw new ConflictError(`This request is already claimed by ${owner.email || 'another assistant'}`);
+            }
+            throw new ConflictError('This request changed while you were claiming it. Refresh the queue and try again.');
         }
-        await request.save();
 
         return {
             message: 'Care request claimed',
