@@ -95,7 +95,7 @@ export class TriageChatController {
         next: NextFunction
     ): Promise<void> {
         try {
-            const result = await triageChatService.updateHandoffNotes(req.params.conversationId, req.user!, req.body.doctor_handoff_notes);
+            const result = await triageChatService.updateHandoffNotes(req.params.conversationId, req.user!, req.body);
             res.json({ success: true, data: result });
         } catch (error) {
             next(error);

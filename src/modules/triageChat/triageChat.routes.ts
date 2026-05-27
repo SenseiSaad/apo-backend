@@ -15,7 +15,7 @@ import {
 const router = Router();
 
 router.use(verifyJWT);
-router.use(requireRole([Role.PATIENT, Role.ASSISTANT, Role.SUPER_ADMIN]));
+router.use(requireRole([Role.PATIENT, Role.ASSISTANT, Role.DOCTOR, Role.SUPER_ADMIN]));
 
 router.get('/conversations', validate(listTriageConversationsQuerySchema, 'query'), triageChatController.listConversations.bind(triageChatController));
 router.post('/care-requests/:careRequestId/conversation', validate(careRequestIdParamSchema, 'params'), triageChatController.ensureConversation.bind(triageChatController));

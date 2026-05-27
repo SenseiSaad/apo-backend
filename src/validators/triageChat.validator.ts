@@ -32,9 +32,25 @@ export const sendTriageMessageSchema = z.object({
     body: z.string().trim().min(1).max(4000)
 });
 
-export const updateHandoffNotesSchema = z.object({
-    doctor_handoff_notes: z.string().trim().max(6000)
+export const triageHandoffSchema = z.object({
+    patient_concern: z.string().trim().max(2000).optional(),
+    symptoms: z.string().trim().max(2000).optional(),
+    urgency: z.string().trim().max(120).optional(),
+    preferred_specialty: z.string().trim().max(120).optional(),
+    preferred_doctor_gender: z.string().trim().max(40).optional(),
+    availability: z.string().trim().max(1000).optional(),
+    red_flags: z.string().trim().max(2000).optional(),
+    suggested_doctor_type: z.string().trim().max(120).optional(),
+    internal_comments: z.string().trim().max(2000).optional()
 });
+
+export const updateHandoffNotesSchema = z.object({
+    doctor_handoff_notes: z.string().trim().max(6000).optional(),
+    doctor_handoff: triageHandoffSchema.optional()
+}).refine(
+    data => data.doctor_handoff_notes !== undefined || data.doctor_handoff !== undefined,
+    { message: 'At least one handoff field is required' }
+);
 
 export type ConversationIdParamInput = z.infer<typeof conversationIdParamSchema>;
 export type CareRequestIdParamInput = z.infer<typeof careRequestIdParamSchema>;

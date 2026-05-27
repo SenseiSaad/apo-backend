@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import { Assistant } from '../../models/Assistant.model';
 import { CareRequest } from '../../models/CareRequest.model';
+import { Doctor as DoctorModel } from '../../models/Doctor.model';
 import { Notification } from '../../models/Notification.model';
 import { Patient } from '../../models/Patient.model';
 import { TriageConversation, TriageMessage } from '../../models/TriageChat.model';
@@ -83,8 +84,10 @@ class TriageChatService {
             match.patient_id = patient._id;
         } else if (actor.role === Role.ASSISTANT) {
             match.assistant_user_id = new mongoose.Types.ObjectId(actor.user_id);
+        } else if (actor.role === Role.DOCTOR) {
+            match.doctor_user_id = new mongoose.Types.ObjectId(actor.user_id);
         } else if (actor.role !== Role.SUPER_ADMIN) {
-            throw new ForbiddenError('Only patients, Assistants, and admins can access triage chat');
+            throw new ForbiddenError('Only patients, Doctors, Assistants, and admins can access triage chat');
         }
 
         const conversationQuery = TriageConversation.find(match)
@@ -100,6 +103,7 @@ class TriageChatService {
                 ]
             })
             .populate('assistant_user_id', 'email')
+            .populate('doctor_user_id', 'email')
             .lean();
 
         const [items, total] = await Promise.all([
@@ -187,6 +191,8 @@ class TriageChatService {
             void this.notifyPatient(conversation);
         } else if (senderRole === 'admin') {
             update.$inc = { patient_unread_count: 1, assistant_unread_count: 1 };
+        } else if (senderRole === 'doctor') {
+            update.$inc = { patient_unread_count: 1, assistant_unread_count: 1, admin_unread_count: 1 };
         }
         const updatedConversation = await TriageConversation.findByIdAndUpdate(conversation._id, update, { new: true });
 
@@ -240,7 +246,7 @@ class TriageChatService {
         };
     }
 
-    async updateHandoffNotes(conversationId: string, actor: JwtPayload, doctorHandoffNotes: string) {
+    async updateHandoffNotes(conversationId: string, actor: JwtPayload, data: { doctor_handoff_notes?: string; doctor_handoff?: Record<string, string | undefined> }) {
         const conversation = await TriageConversation.findById(conversationId);
         if (!conversation) {
             throw new NotFoundError('Triage conversation not found');
@@ -251,7 +257,12 @@ class TriageChatService {
             throw new ForbiddenError('Only Assistants and admins can update handoff notes');
         }
 
-        conversation.doctor_handoff_notes = doctorHandoffNotes;
+        if (data.doctor_handoff_notes !== undefined) {
+            conversation.doctor_handoff_notes = data.doctor_handoff_notes;
+        }
+        if (data.doctor_handoff !== undefined) {
+            conversation.doctor_handoff = data.doctor_handoff;
+        }
         await conversation.save();
 
         this.publish('triage:notes_updated', {
@@ -261,6 +272,61 @@ class TriageChatService {
         return {
             conversation: await this.formatConversation(conversationId, actor)
         };
+    }
+
+    async onboardDoctorForCareRequest(careRequestId: string, actorUserId: string) {
+        const request = await CareRequest.findById(careRequestId)
+            .populate({
+                path: 'patient_id',
+                populate: { path: 'user_id', select: 'email' }
+            })
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'user_id', select: 'email role status' }
+            });
+
+        if (!request) {
+            throw new NotFoundError('Care request not found');
+        }
+
+        const doctor = request.doctor_id as any;
+        const doctorUser = doctor?.user_id;
+        if (!doctor?._id || !doctorUser?._id) {
+            throw new BadRequestError('Care request does not have an assigned Doctor');
+        }
+
+        let conversation = await TriageConversation.findOne({ care_request_id: request._id });
+        if (!conversation) {
+            conversation = await TriageConversation.create({
+                care_request_id: request._id,
+                patient_id: request.patient_id,
+                assistant_user_id: request.claimed_by,
+                assistant_id: request.claimed_assistant_id,
+                status: 'open',
+                last_message_at: new Date()
+            });
+            await this.createSystemMessage(conversation, 'Care thread opened for Doctor onboarding.');
+        }
+
+        const previousDoctorUserId = conversation.doctor_user_id?.toString();
+        conversation.doctor_id = doctor._id;
+        conversation.doctor_user_id = doctorUser._id;
+        conversation.status = 'open';
+        await conversation.save();
+
+        if (previousDoctorUserId !== doctorUser._id.toString()) {
+            const doctorName = doctor.personal_info?.full_name || this.formatNameFromEmail(doctorUser.email || '');
+            await this.createSystemMessage(conversation, `${doctorName} joined this care thread as the assigned Doctor.`);
+        }
+
+        this.publish('triage:doctor_onboarded', {
+            conversation: await this.formatConversation(conversation._id.toString(), {
+                user_id: actorUserId,
+                role: Role.SUPER_ADMIN,
+                email: '',
+                jti: ''
+            } as JwtPayload)
+        }, this.getRooms(conversation));
     }
 
     async closeConversationForCareRequest(careRequestId: string, actorUserId: string, reason: string) {
@@ -330,6 +396,9 @@ class TriageChatService {
         const request = await CareRequest.findById(conversation.care_request_id).populate({
             path: 'patient_id',
             populate: { path: 'user_id', select: 'email status role' }
+        }).populate({
+            path: 'doctor_id',
+            populate: { path: 'user_id', select: 'email status role' }
         });
         if (!request) {
             throw new NotFoundError('Care request not found');
@@ -350,6 +419,15 @@ class TriageChatService {
             }
             if (requireWrite && request.claim_expires_at && new Date(request.claim_expires_at).getTime() <= Date.now()) {
                 throw new ConflictError('Assistant claim has expired');
+            }
+            return;
+        }
+
+        if (actor.role === Role.DOCTOR) {
+            const doctor = request.doctor_id as any;
+            const doctorUserId = doctor?.user_id?._id?.toString() || doctor?.user_id?.toString();
+            if (conversation.doctor_user_id?.toString() !== actor.user_id && doctorUserId !== actor.user_id) {
+                throw new ForbiddenError('Doctor can access only assigned care threads');
             }
             return;
         }
@@ -379,12 +457,14 @@ class TriageChatService {
         const conversation = await TriageConversation.findById(conversationId)
             .populate({
                 path: 'care_request_id',
+                select: 'patient_id doctor_id status urgency reason claimed_by claim_expires_at',
                 populate: [
-                    { path: 'patient_id', populate: { path: 'user_id', select: 'email' } },
-                    { path: 'doctor_id', populate: { path: 'user_id', select: 'email' } }
+                    { path: 'patient_id', select: 'full_name user_id', populate: { path: 'user_id', select: 'email' } },
+                    { path: 'doctor_id', select: 'personal_info user_id specialty', populate: { path: 'user_id', select: 'email' } }
                 ]
             })
-            .populate('assistant_user_id', 'email');
+            .populate('assistant_user_id', 'email')
+            .populate('doctor_user_id', 'email');
 
         if (!conversation) {
             throw new NotFoundError('Triage conversation not found');
@@ -400,6 +480,7 @@ class TriageChatService {
         const doctor = request?.doctor_id;
         const doctorUser = doctor?.user_id;
         const assistantUser = conversation.assistant_user_id as any;
+        const doctorParticipantUser = conversation.doctor_user_id as any;
 
         return {
             conversation_id: conversation._id.toString(),
@@ -409,13 +490,17 @@ class TriageChatService {
             patient_email: patientUser?.email,
             assistant_user_id: assistantUser?._id?.toString() || conversation.assistant_user_id?.toString() || null,
             assistant_email: assistantUser?.email || null,
+            doctor_user_id: doctorParticipantUser?._id?.toString() || conversation.doctor_user_id?.toString() || doctorUser?._id?.toString() || null,
             doctor_id: doctor?._id?.toString() || request?.doctor_id?.toString() || null,
             doctor_name: doctor?.personal_info?.full_name || this.formatNameFromEmail(doctorUser?.email || ''),
+            doctor_email: doctorUser?.email || doctorParticipantUser?.email || null,
+            doctor_specialty: doctor?.specialty || null,
             status: conversation.status,
             care_request_status: request?.status,
             urgency: request?.urgency,
             reason: request?.reason,
             doctor_handoff_notes: conversation.doctor_handoff_notes || '',
+            doctor_handoff: conversation.doctor_handoff || {},
             unread_count: actor.role === Role.PATIENT
                 ? conversation.patient_unread_count
                 : actor.role === Role.ASSISTANT
@@ -472,6 +557,7 @@ class TriageChatService {
     private getSenderRole(actor: JwtPayload) {
         if (actor.role === Role.PATIENT) return 'patient';
         if (actor.role === Role.ASSISTANT) return 'assistant';
+        if (actor.role === Role.DOCTOR) return 'doctor';
         if (actor.role === Role.SUPER_ADMIN) return 'admin';
         throw new ForbiddenError('Unsupported triage chat role');
     }
@@ -481,6 +567,7 @@ class TriageChatService {
             `triage:${conversation._id.toString()}`,
             `user:${conversation.patient_id?.toString()}`,
             conversation.assistant_user_id ? `user:${conversation.assistant_user_id.toString()}` : '',
+            conversation.doctor_user_id ? `user:${conversation.doctor_user_id.toString()}` : '',
             'role:super_admin'
         ].filter(Boolean);
     }

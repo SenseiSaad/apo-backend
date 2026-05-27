@@ -110,20 +110,38 @@ export class CareRequestService {
             return { message: 'Patient marked as no longer needing treatment' };
         }
 
-        request.status = patient.doctor_id ? 'patient_requested_closure' : 'closed_by_patient';
+        const hasAssignedDoctor = Boolean(request.doctor_id || patient.doctor_id);
+        request.status = hasAssignedDoctor ? 'patient_requested_closure' : 'closed_by_patient';
         request.requested_closure_at = new Date();
-        if (!patient.doctor_id) {
+        if (!hasAssignedDoctor) {
             request.closed_at = new Date();
             request.closed_by = patient.user_id;
+            request.claimed_by = undefined;
+            request.claimed_assistant_id = undefined;
+            request.claimed_at = undefined;
+            request.claim_expires_at = undefined;
         }
         await request.save();
 
-        patient.care_status = patient.doctor_id ? 'assigned' : 'treated';
+        patient.care_status = hasAssignedDoctor ? 'assigned' : 'treated';
         patient.care_status_updated_at = new Date();
+        if (!hasAssignedDoctor) {
+            patient.doctor_id = undefined;
+            patient.doctor_assigned_at = undefined;
+        }
         await patient.save();
 
+        if (!hasAssignedDoctor) {
+            const { triageChatService } = await import('../modules/triageChat/triageChat.service');
+            await triageChatService.closeConversationForCareRequest(
+                request._id.toString(),
+                userId,
+                'Patient marked that care is no longer needed. Triage chat closed.'
+            );
+        }
+
         return {
-            message: patient.doctor_id
+            message: hasAssignedDoctor
                 ? 'Closure request sent to the assigned Doctor'
                 : 'Care request closed',
             care_request: await this.getFormattedRequest(request._id.toString())

@@ -1,8 +1,20 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 
 export type TriageConversationStatus = 'open' | 'closed' | 'archived';
-export type TriageMessageSenderRole = 'patient' | 'assistant' | 'admin' | 'system';
+export type TriageMessageSenderRole = 'patient' | 'assistant' | 'doctor' | 'admin' | 'system';
 export type TriageMessageType = 'text' | 'system';
+
+export interface ITriageHandoff {
+    patient_concern?: string;
+    symptoms?: string;
+    urgency?: string;
+    preferred_specialty?: string;
+    preferred_doctor_gender?: string;
+    availability?: string;
+    red_flags?: string;
+    suggested_doctor_type?: string;
+    internal_comments?: string;
+}
 
 export interface ITriageConversation extends Document {
     _id: mongoose.Types.ObjectId;
@@ -10,8 +22,11 @@ export interface ITriageConversation extends Document {
     patient_id: mongoose.Types.ObjectId;
     assistant_user_id?: mongoose.Types.ObjectId;
     assistant_id?: mongoose.Types.ObjectId;
+    doctor_id?: mongoose.Types.ObjectId;
+    doctor_user_id?: mongoose.Types.ObjectId;
     status: TriageConversationStatus;
     doctor_handoff_notes?: string;
+    doctor_handoff?: ITriageHandoff;
     patient_unread_count: number;
     assistant_unread_count: number;
     admin_unread_count: number;
@@ -43,8 +58,21 @@ const TriageConversationSchema = new Schema<ITriageConversation>(
         patient_id: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
         assistant_user_id: { type: Schema.Types.ObjectId, ref: 'User', index: true },
         assistant_id: { type: Schema.Types.ObjectId, ref: 'Assistant' },
+        doctor_id: { type: Schema.Types.ObjectId, ref: 'Doctor', index: true },
+        doctor_user_id: { type: Schema.Types.ObjectId, ref: 'User', index: true },
         status: { type: String, enum: ['open', 'closed', 'archived'], default: 'open', required: true, index: true },
         doctor_handoff_notes: { type: String, maxlength: 6000 },
+        doctor_handoff: {
+            patient_concern: { type: String, maxlength: 2000 },
+            symptoms: { type: String, maxlength: 2000 },
+            urgency: { type: String, maxlength: 120 },
+            preferred_specialty: { type: String, maxlength: 120 },
+            preferred_doctor_gender: { type: String, maxlength: 40 },
+            availability: { type: String, maxlength: 1000 },
+            red_flags: { type: String, maxlength: 2000 },
+            suggested_doctor_type: { type: String, maxlength: 120 },
+            internal_comments: { type: String, maxlength: 2000 }
+        },
         patient_unread_count: { type: Number, default: 0, min: 0 },
         assistant_unread_count: { type: Number, default: 0, min: 0 },
         admin_unread_count: { type: Number, default: 0, min: 0 },
@@ -64,7 +92,7 @@ const TriageMessageSchema = new Schema<ITriageMessage>(
         care_request_id: { type: Schema.Types.ObjectId, ref: 'CareRequest', required: true, index: true },
         patient_id: { type: Schema.Types.ObjectId, ref: 'Patient', required: true, index: true },
         sender_user_id: { type: Schema.Types.ObjectId, ref: 'User' },
-        sender_role: { type: String, enum: ['patient', 'assistant', 'admin', 'system'], required: true },
+        sender_role: { type: String, enum: ['patient', 'assistant', 'doctor', 'admin', 'system'], required: true },
         message_type: { type: String, enum: ['text', 'system'], default: 'text', required: true },
         body: { type: String, required: true, maxlength: 4000 },
         read_by_patient_at: { type: Date },
@@ -79,6 +107,7 @@ const TriageMessageSchema = new Schema<ITriageMessage>(
 
 TriageConversationSchema.index({ patient_id: 1, status: 1, last_message_at: -1 });
 TriageConversationSchema.index({ assistant_user_id: 1, status: 1, last_message_at: -1 });
+TriageConversationSchema.index({ doctor_user_id: 1, status: 1, last_message_at: -1 });
 TriageConversationSchema.index({ status: 1, last_message_at: -1 });
 TriageMessageSchema.index({ conversation_id: 1, created_at: -1, _id: -1 });
 TriageMessageSchema.index({ conversation_id: 1, read_by_patient_at: 1 });

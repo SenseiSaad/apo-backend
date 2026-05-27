@@ -200,11 +200,7 @@ export class PatientAssignmentService {
         await patient.save();
         const careRequestId = await careRequestService.syncAssignment(patient._id.toString(), doctor._id.toString(), input.actorUserId);
         if (careRequestId) {
-            await triageChatService.closeConversationForCareRequest(
-                careRequestId,
-                input.actorUserId,
-                'Patient assigned to Doctor. Triage chat closed and preserved for handoff.'
-            );
+            await triageChatService.onboardDoctorForCareRequest(careRequestId, input.actorUserId);
         }
 
         return {
