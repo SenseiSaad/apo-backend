@@ -3,19 +3,20 @@ import { logger } from '../utils/logger';
 
 class RedisService {
     private client: RedisClientType | null = null;
-    private isConnected: boolean = false;
 
     async connect(): Promise<void> {
-        if (this.isConnected && this.client) {
+        if (this.client?.isReady) {
             return;
         }
 
         try {
             const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+            const useTls = redisUrl.startsWith('rediss://');
             
             this.client = createClient({
                 url: redisUrl,
                 socket: {
+                    ...(useTls ? { tls: true, rejectUnauthorized: false } : {}),
                     reconnectStrategy: (retries) => {
                         if (retries > 10) {
                             logger.error('Redis: Max reconnection attempts reached');
@@ -28,23 +29,20 @@ class RedisService {
 
             this.client.on('error', (err) => {
                 logger.error('Redis Client Error:', err);
-                this.isConnected = false;
             });
 
-            this.client.on('connect', () => {
+            this.client.on('ready', () => {
                 logger.info('✅ Redis connected');
-                this.isConnected = true;
             });
 
-            this.client.on('disconnect', () => {
+            this.client.on('end', () => {
                 logger.warn('⚠️  Redis disconnected');
-                this.isConnected = false;
             });
 
             await this.client.connect();
         } catch (error) {
             logger.warn('⚠️  Redis not available - using in-memory fallback');
-            logger.warn('For production, please install and configure Redis');
+            logger.warn(error instanceof Error ? error.message : String(error));
             // Don't throw error - allow app to continue without Redis
         }
     }
@@ -52,13 +50,12 @@ class RedisService {
     async disconnect(): Promise<void> {
         if (this.client) {
             await this.client.quit();
-            this.isConnected = false;
             logger.info('Redis disconnected');
         }
     }
 
     getClient(): RedisClientType {
-        if (!this.client || !this.isConnected) {
+        if (!this.client?.isReady) {
             logger.warn('Redis not connected - operation skipped');
             throw new Error('Redis client not connected');
         }
