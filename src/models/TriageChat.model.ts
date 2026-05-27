@@ -77,9 +77,12 @@ const TriageMessageSchema = new Schema<ITriageMessage>(
     }
 );
 
-TriageConversationSchema.index({ patient_id: 1, status: 1, updated_at: -1 });
-TriageConversationSchema.index({ assistant_user_id: 1, status: 1, updated_at: -1 });
-TriageMessageSchema.index({ conversation_id: 1, created_at: -1 });
+TriageConversationSchema.index({ patient_id: 1, status: 1, last_message_at: -1 });
+TriageConversationSchema.index({ assistant_user_id: 1, status: 1, last_message_at: -1 });
+TriageConversationSchema.index({ status: 1, last_message_at: -1 });
+TriageMessageSchema.index({ conversation_id: 1, created_at: -1, _id: -1 });
+TriageMessageSchema.index({ conversation_id: 1, read_by_patient_at: 1 });
+TriageMessageSchema.index({ conversation_id: 1, read_by_assistant_at: 1 });
 
 export const TriageConversation: Model<ITriageConversation> =
     mongoose.models.TriageConversation || mongoose.model<ITriageConversation>('TriageConversation', TriageConversationSchema);

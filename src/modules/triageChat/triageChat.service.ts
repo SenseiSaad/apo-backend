@@ -7,6 +7,7 @@ import { TriageConversation, TriageMessage } from '../../models/TriageChat.model
 import { Role, NotificationType } from '../../models/enums';
 import { JwtPayload } from '../../utils/jwt';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { logger } from '../../utils/logger';
 
 type PublishRealtime = (event: string, payload: unknown, rooms: string[]) => void;
 
@@ -86,13 +87,28 @@ class TriageChatService {
             throw new ForbiddenError('Only patients, Assistants, and admins can access triage chat');
         }
 
+        const conversationQuery = TriageConversation.find(match)
+            .sort({ last_message_at: -1, updated_at: -1 })
+            .skip(skip)
+            .limit(limit)
+            .populate({
+                path: 'care_request_id',
+                select: 'patient_id doctor_id status urgency reason claimed_by claim_expires_at',
+                populate: [
+                    { path: 'patient_id', select: 'full_name user_id', populate: { path: 'user_id', select: 'email' } },
+                    { path: 'doctor_id', select: 'personal_info user_id', populate: { path: 'user_id', select: 'email' } }
+                ]
+            })
+            .populate('assistant_user_id', 'email')
+            .lean();
+
         const [items, total] = await Promise.all([
-            TriageConversation.find(match).sort({ last_message_at: -1, updated_at: -1 }).skip(skip).limit(limit),
+            conversationQuery,
             TriageConversation.countDocuments(match)
         ]);
 
         return {
-            conversations: await Promise.all(items.map(item => this.formatConversation(item._id.toString(), actor))),
+            conversations: items.map(item => this.formatConversationDocument(item, actor)),
             pagination: {
                 page,
                 limit,
@@ -129,7 +145,10 @@ class TriageChatService {
             match.created_at = { $lt: new Date(query.before) };
         }
 
-        const messages = await TriageMessage.find(match).sort({ created_at: -1 }).limit(query.limit);
+        const messages = await TriageMessage.find(match)
+            .sort({ created_at: -1, _id: -1 })
+            .limit(query.limit)
+            .lean();
         return {
             messages: messages.reverse().map(message => this.formatMessage(message))
         };
@@ -157,23 +176,22 @@ class TriageChatService {
             body
         });
 
-        conversation.last_message_at = message.created_at;
+        const update: Record<string, unknown> = {
+            last_message_at: message.created_at
+        };
         if (senderRole === 'patient') {
-            conversation.assistant_unread_count += 1;
-            conversation.admin_unread_count += 1;
-            await this.notifyAssistant(conversation);
+            update.$inc = { assistant_unread_count: 1, admin_unread_count: 1 };
+            void this.notifyAssistant(conversation);
         } else if (senderRole === 'assistant') {
-            conversation.patient_unread_count += 1;
-            conversation.admin_unread_count += 1;
-            await this.notifyPatient(conversation);
+            update.$inc = { patient_unread_count: 1, admin_unread_count: 1 };
+            void this.notifyPatient(conversation);
         } else if (senderRole === 'admin') {
-            conversation.patient_unread_count += 1;
-            conversation.assistant_unread_count += 1;
+            update.$inc = { patient_unread_count: 1, assistant_unread_count: 1 };
         }
-        await conversation.save();
+        const updatedConversation = await TriageConversation.findByIdAndUpdate(conversation._id, update, { new: true });
 
         const formattedMessage = this.formatMessage(message);
-        const formattedConversation = await this.formatConversation(conversationId, actor);
+        const formattedConversation = await this.formatConversation((updatedConversation || conversation)._id.toString(), actor);
         this.publish('triage:message_created', {
             message: formattedMessage,
             conversation: formattedConversation
@@ -206,10 +224,10 @@ class TriageChatService {
             update.read_by_admin_at = now;
         }
 
-        await Promise.all([
-            TriageMessage.updateMany({ conversation_id: conversation._id }, { $set: update }),
-            conversation.save()
-        ]);
+        await conversation.save();
+        void TriageMessage.updateMany({ conversation_id: conversation._id }, { $set: update }).catch(error => {
+            logger.warn(`Triage read receipt update failed: ${error instanceof Error ? error.message : String(error)}`);
+        });
 
         this.publish('triage:read', {
             conversation_id: conversation._id.toString(),
@@ -372,6 +390,10 @@ class TriageChatService {
             throw new NotFoundError('Triage conversation not found');
         }
 
+        return this.formatConversationDocument(conversation, actor);
+    }
+
+    private formatConversationDocument(conversation: any, actor: JwtPayload) {
         const request = conversation.care_request_id as any;
         const patient = request?.patient_id;
         const patientUser = patient?.user_id;
