@@ -6,6 +6,7 @@ import {
     CancelVideoSessionInput,
     CareRequestVideoParamInput,
     CreateVideoSessionInput,
+    CreateUrgentVideoSessionInput,
     VideoSessionIdParamInput
 } from '../../validators/videoSession.validator';
 
@@ -27,6 +28,16 @@ export class VideoSessionController {
         try {
             const result = await videoSessionService.listAvailableSlots(req.params.careRequestId, req.user!, req.query);
             res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
+    
+    async createUrgent(req: AuthRequest<Record<string, never>, Record<string, never>, CreateUrgentVideoSessionInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await videoSessionService.createUrgent(req.user!, req.body);
+            res.status(201).json({ success: true, data: result });
         } catch (error) {
             next(error);
         }

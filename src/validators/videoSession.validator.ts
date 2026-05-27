@@ -24,6 +24,12 @@ export const cancelVideoSessionSchema = z.object({
 
 export type CareRequestVideoParamInput = z.infer<typeof careRequestVideoParamSchema>;
 export type VideoSessionIdParamInput = z.infer<typeof videoSessionIdParamSchema>;
+
+export const createUrgentVideoSessionSchema = z.object({
+    care_request_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid care request ID')
+});
+export type CreateUrgentVideoSessionInput = z.infer<typeof createUrgentVideoSessionSchema>;
+
 export type CreateVideoSessionInput = z.infer<typeof createVideoSessionSchema>;
 export type AvailableVideoSlotsQueryInput = z.infer<typeof availableVideoSlotsQuerySchema>;
 export type CancelVideoSessionInput = z.infer<typeof cancelVideoSessionSchema>;

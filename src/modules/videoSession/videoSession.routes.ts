@@ -8,6 +8,7 @@ import {
     cancelVideoSessionSchema,
     careRequestVideoParamSchema,
     createVideoSessionSchema,
+    createUrgentVideoSessionSchema,
     videoSessionIdParamSchema
 } from '../../validators/videoSession.validator';
 
@@ -28,6 +29,7 @@ router.get(
     validate(availableVideoSlotsQuerySchema, 'query'),
     videoSessionController.availableSlots.bind(videoSessionController)
 );
+router.post('/urgent', validate(createUrgentVideoSessionSchema), videoSessionController.createUrgent.bind(videoSessionController));
 router.post('/', validate(createVideoSessionSchema), videoSessionController.create.bind(videoSessionController));
 router.post(
     '/:sessionId/join-token',

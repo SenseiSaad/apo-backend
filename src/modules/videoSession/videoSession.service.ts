@@ -59,6 +59,122 @@ class VideoSessionService {
         };
     }
 
+    
+    async createUrgent(actor: JwtPayload, data: { care_request_id?: string }) {
+        if (!data.care_request_id) throw new BadRequestError('care_request_id is required');
+        const request = await this.getAuthorizedCareRequest(data.care_request_id, actor, true);
+        if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN) {
+            throw new ForbiddenError('Only the assigned Doctor or admin can schedule urgent video sessions');
+        }
+        if (!request.doctor_id) {
+            throw new BadRequestError('Assign a Doctor before scheduling video');
+        }
+        if (!openCareStatuses.includes(request.status)) {
+            throw new BadRequestError('Video sessions can only be scheduled for assigned or in-treatment cases');
+        }
+
+        const doctorId = request.doctor_id._id?.toString() || request.doctor_id.toString();
+        const patientId = request.patient_id._id?.toString() || request.patient_id.toString();
+        const now = new Date();
+
+        const activeExisting = await VideoSession.findOne({
+            doctor_id: doctorId,
+            status: { $in: activeVideoStatuses },
+            scheduled_start_at: { $lte: now },
+            scheduled_end_at: { $gte: now }
+        });
+        if (activeExisting) {
+            throw new ConflictError('Doctor is already in an active video session');
+        }
+
+        const durationMins = 15;
+        const scheduledEnd = new Date(now.getTime() + durationMins * 60000);
+
+        const session = await mongoose.startSession();
+        session.startTransaction();
+
+        let videoSession;
+        try {
+            // 1. Identify all overlapping available slots
+            const eclipsedSlots = await SessionBooking.find({
+                doctor_id: doctorId,
+                status: SessionStatus.AVAILABLE,
+                $expr: {
+                    $and: [
+                        { $lt: ["$scheduled_at", scheduledEnd] },
+                        { $gt: [{ $add: ["$scheduled_at", { $multiply: ["$duration_mins", 60000] }] }, now] }
+                    ]
+                }
+            }).session(session);
+            const eclipsedSlotIds = eclipsedSlots.map(s => s._id);
+
+            // 2. Cancel them (Shadow Eclipse)
+            if (eclipsedSlotIds.length > 0) {
+                await SessionBooking.updateMany(
+                    { _id: { $in: eclipsedSlotIds } },
+                    { $set: { status: SessionStatus.CANCELLED } },
+                    { session }
+                );
+            }
+
+            // 3. Create pristine virtual slot
+            const [slot] = await SessionBooking.create([{
+                doctor_id: doctorId,
+                patient_id: patientId,
+                scheduled_at: now,
+                duration_mins: durationMins,
+                status: SessionStatus.CONFIRMED,
+                mode: 'video'
+            }], { session });
+
+            // 4. Create Video Session
+            [videoSession] = await VideoSession.create([{
+                care_request_id: request._id,
+                patient_id: patientId,
+                doctor_id: doctorId,
+                slot_id: slot._id,
+                created_by: actor.user_id,
+                status: 'scheduled',
+                scheduled_start_at: slot.scheduled_at,
+                scheduled_end_at: scheduledEnd,
+                max_duration_minutes: durationMins,
+                agora_channel_name: this.buildChannelName(request._id.toString(), slot._id.toString()),
+                patient_uid: 1,
+                doctor_uid: 2
+            }], { session });
+
+            // 5. Check for TOCTOU Race Conditions
+            const overlaps = await VideoSession.find({
+                doctor_id: doctorId,
+                status: { $in: activeVideoStatuses },
+                scheduled_start_at: { $lt: scheduledEnd },
+                scheduled_end_at: { $gt: slot.scheduled_at }
+            }).sort({ _id: 1 }).session(session);
+
+            if (overlaps.length > 1 && overlaps[0]._id.toString() !== videoSession._id.toString()) {
+                throw new ConflictError('Doctor already has a video session overlapping right now');
+            }
+
+            await session.commitTransaction();
+        } catch (error) {
+            await session.abortTransaction();
+            throw error;
+        } finally {
+            await session.endSession();
+        }
+
+        // 6. Outside of transaction, send chat system message
+        await triageChatService.addSystemMessageForCareRequest(
+            request._id.toString(),
+            `🚨 Urgent video session started. [Click here to join](#video-session)`
+        );
+
+        return {
+            message: 'Urgent video session started',
+            video_session: this.formatSession(await videoSession.populate('slot_id', 'scheduled_at duration_mins status mode'))
+        };
+    }
+
     async create(actor: JwtPayload, data: { care_request_id: string; slot_id: string }) {
         const request = await this.getAuthorizedCareRequest(data.care_request_id, actor, true);
         if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN) {
