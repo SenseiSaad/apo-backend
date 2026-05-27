@@ -5,6 +5,7 @@ import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
 import { avatarViewerService } from './modules/avatarViewer/avatarViewer.service';
 import { triageChatSocketService } from './modules/triageChat/triageChat.socket';
+import cron from 'node-cron';
 
 const PORT = process.env.PORT || 5000;
 
@@ -31,6 +32,18 @@ async function bootstrap() {
 
         avatarViewerService.attachWebSocketServer(server);
         triageChatSocketService.attach(server, allowedOrigins);
+
+        cron.schedule('*/5 * * * *', async () => {
+            try {
+                const { videoSessionService } = await import('./modules/videoSession/videoSession.service');
+                const result = await videoSessionService.cleanupExpired();
+                if (result.closed > 0) {
+                    logger.info(`Video session cleanup closed ${result.closed} expired session(s)`);
+                }
+            } catch (error) {
+                logger.error('Video session cleanup failed:', error);
+            }
+        });
 
         // Graceful shutdown
         const shutdown = async (signal: string) => {

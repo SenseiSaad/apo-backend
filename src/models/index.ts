@@ -25,6 +25,7 @@ export * from './AiEmbedding.model';
 
 // Sessions & Webinars
 export * from './SessionBooking.model';
+export * from './VideoSession.model';
 export * from './Webinar.model';
 
 // Content

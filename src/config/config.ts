@@ -107,6 +107,15 @@ export const config = {
         cancellationWindowHours: 24, // cancellation allowed up to 24h before
     },
 
+    agora: {
+        appId: process.env.AGORA_APP_ID || '',
+        appCertificate: process.env.AGORA_APP_CERTIFICATE || '',
+        tokenTtlSeconds: parseInt(process.env.AGORA_RTC_TOKEN_TTL_SECONDS || '3600'),
+        sessionMaxMinutes: parseInt(process.env.VIDEO_SESSION_MAX_MINUTES || '50'),
+        joinEarlyMinutes: parseInt(process.env.VIDEO_SESSION_JOIN_EARLY_MINUTES || '5'),
+        graceMinutes: parseInt(process.env.VIDEO_SESSION_GRACE_MINUTES || '10'),
+    },
+
     ai: {
         geminiApiKey: process.env.GEMINI_API_KEY || '',
         maxFileSizeForScan: 10 * 1024 * 1024, // 10MB

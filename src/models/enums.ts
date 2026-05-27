@@ -49,8 +49,11 @@ export enum SessionStatus {
     REQUESTED = 'requested',
     PENDING = 'pending',
     CONFIRMED = 'confirmed',
+    IN_SESSION = 'in_session',
     CANCELLED = 'cancelled',
-    COMPLETED = 'completed'
+    COMPLETED = 'completed',
+    EXPIRED = 'expired',
+    MISSED = 'missed'
 }
 
 export enum DocumentStatus {

@@ -139,6 +139,12 @@ export class CareRequestService {
                 userId,
                 'Patient marked that care is no longer needed. Triage chat closed.'
             );
+            const { videoSessionService } = await import('../modules/videoSession/videoSession.service');
+            await videoSessionService.cancelOpenSessionsForCareRequest(
+                request._id.toString(),
+                userId,
+                'Patient marked that care is no longer needed. Video session cancelled.'
+            );
         }
 
         return {
@@ -801,6 +807,8 @@ export class CareRequestService {
         if (data.status && closedRequestStatuses.includes(data.status)) {
             const { triageChatService } = await import('../modules/triageChat/triageChat.service');
             await triageChatService.closeConversationForCareRequest(request._id.toString(), actorUserId, `Care request marked ${data.status}. Triage chat closed.`);
+            const { videoSessionService } = await import('../modules/videoSession/videoSession.service');
+            await videoSessionService.cancelOpenSessionsForCareRequest(request._id.toString(), actorUserId, `Care request marked ${data.status}; video session closed.`);
             await Patient.findByIdAndUpdate(request.patient_id, {
                 $set: {
                     care_status: 'treated',

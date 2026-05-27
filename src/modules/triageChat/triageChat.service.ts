@@ -374,6 +374,18 @@ class TriageChatService {
         }, this.getRooms(conversation));
     }
 
+    async addSystemMessageForCareRequest(careRequestId: string, body: string) {
+        const conversation = await TriageConversation.findOne({ care_request_id: careRequestId });
+        if (!conversation) {
+            return;
+        }
+        await this.createSystemMessage(conversation, body);
+        this.publish('triage:system_message', {
+            conversation_id: conversation._id.toString(),
+            body
+        }, this.getRooms(conversation));
+    }
+
     async emitTyping(conversationId: string, actor: JwtPayload, isTyping: boolean) {
         const conversation = await TriageConversation.findById(conversationId);
         if (!conversation) {
