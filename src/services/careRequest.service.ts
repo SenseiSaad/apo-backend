@@ -858,15 +858,20 @@ export class CareRequestService {
             throw new NotFoundError('Open care request not found for this patient');
         }
 
+        const isClosed = data.outcome !== 'follow_up_needed';
+
         request.status = data.outcome;
         request.outcome = data.outcome;
         request.doctor_notes = data.doctor_notes;
-        request.closed_at = new Date();
-        request.closed_by = new mongoose.Types.ObjectId(doctorUserId);
-        request.claimed_by = undefined;
-        request.claimed_assistant_id = undefined;
-        request.claimed_at = undefined;
-        request.claim_expires_at = undefined;
+        
+        if (isClosed) {
+            request.closed_at = new Date();
+            request.closed_by = new mongoose.Types.ObjectId(doctorUserId);
+            request.claimed_by = undefined;
+            request.claimed_assistant_id = undefined;
+            request.claimed_at = undefined;
+            request.claim_expires_at = undefined;
+        }
         await request.save();
 
         if (data.outcome === 'follow_up_needed') {
@@ -878,6 +883,21 @@ export class CareRequestService {
         }
         patient.care_status_updated_at = new Date();
         await patient.save();
+
+        if (isClosed) {
+            const { triageChatService } = await import('../modules/triageChat/triageChat.service');
+            await triageChatService.closeConversationForCareRequest(
+                request._id.toString(), 
+                doctorUserId, 
+                `Doctor marked case as ${data.outcome}. Care thread closed.`
+            );
+            const { videoSessionService } = await import('../modules/videoSession/videoSession.service');
+            await videoSessionService.cancelOpenSessionsForCareRequest(
+                request._id.toString(), 
+                doctorUserId, 
+                `Doctor marked case as ${data.outcome}; video session closed.`
+            );
+        }
 
         return {
             message: 'Treatment outcome saved',
