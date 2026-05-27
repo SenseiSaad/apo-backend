@@ -37,6 +37,12 @@ router.post(
 );
 router.post('/:sessionId/end', validate(videoSessionIdParamSchema, 'params'), videoSessionController.end.bind(videoSessionController));
 router.post(
+    '/:sessionId/ping',
+    requireRole([Role.PATIENT, Role.DOCTOR]),
+    validate(videoSessionIdParamSchema, 'params'),
+    videoSessionController.ping.bind(videoSessionController)
+);
+router.post(
     '/:sessionId/cancel',
     validate(videoSessionIdParamSchema, 'params'),
     validate(cancelVideoSessionSchema),

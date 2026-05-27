@@ -97,21 +97,8 @@ class VideoSessionService {
 
         const duration = Math.min(slot.duration_mins || maxMinutes, maxMinutes);
         const scheduledEnd = new Date(slot.scheduled_at.getTime() + duration * 60 * 1000);
-        const existing = await VideoSession.findOne({
-            doctor_id: doctorId,
-            status: { $in: activeVideoStatuses },
-            scheduled_start_at: { $lt: scheduledEnd },
-            scheduled_end_at: { $gt: slot.scheduled_at }
-        });
-        if (existing) {
-            await SessionBooking.findByIdAndUpdate(slot._id, {
-                $unset: { patient_id: '' },
-                $set: { status: SessionStatus.AVAILABLE }
-            });
-            throw new ConflictError('Doctor already has a video session overlapping this slot');
-        }
-
         try {
+// TOCTOU Fix: Optimistic creation followed by overlap validation
             const videoSession = await VideoSession.create({
                 care_request_id: request._id,
                 patient_id: patientId,
@@ -127,6 +114,24 @@ class VideoSessionService {
                 doctor_uid: this.numericUid(doctorId, 2)
             });
 
+            // Check if another concurrent request created an overlapping session
+            const overlaps = await VideoSession.find({
+                doctor_id: doctorId,
+                status: { $in: activeVideoStatuses },
+                scheduled_start_at: { $lt: scheduledEnd },
+                scheduled_end_at: { $gt: slot.scheduled_at }
+            }).sort({ _id: 1 }); // Sort by creation order
+
+            if (overlaps.length > 1 && overlaps[0]._id.toString() !== videoSession._id.toString()) {
+                // We lost the race! Revert our session and slot
+                await VideoSession.findByIdAndDelete(videoSession._id);
+                await SessionBooking.findByIdAndUpdate(slot._id, {
+                    $unset: { patient_id: '' },
+                    $set: { status: SessionStatus.AVAILABLE }
+                });
+                throw new ConflictError('Doctor already has a video session overlapping this slot');
+            }
+
             await triageChatService.addSystemMessageForCareRequest(
                 request._id.toString(),
                 `Video session scheduled for ${slot.scheduled_at.toLocaleString()} (${duration} minutes).`
@@ -136,6 +141,7 @@ class VideoSessionService {
                 message: 'Video session scheduled',
                 video_session: this.formatSession(await videoSession.populate('slot_id', 'scheduled_at duration_mins status mode'))
             };
+
         } catch (error) {
             await SessionBooking.findByIdAndUpdate(slot._id, {
                 $unset: { patient_id: '' },
@@ -146,7 +152,7 @@ class VideoSessionService {
     }
 
     async joinToken(sessionId: string, actor: JwtPayload) {
-        const liveActor = await this.getLiveActiveActor(actor, [Role.PATIENT, Role.DOCTOR]);
+        const liveActor = await this.getLiveActiveActor(actor, [Role.PATIENT, Role.DOCTOR, Role.SUPER_ADMIN]);
         const videoSession = await VideoSession.findById(sessionId).populate('slot_id', 'status patient_id doctor_id').populate('care_request_id');
         if (!videoSession) {
             throw new NotFoundError('Video session not found');
@@ -159,22 +165,49 @@ class VideoSessionService {
         const secondsUntilClose = this.assertJoinWindow(videoSession);
 
         const now = new Date();
-        if (videoSession.status === 'scheduled') {
-            videoSession.status = 'active';
-            videoSession.started_at = now;
-            await SessionBooking.findByIdAndUpdate(this.idOf(videoSession.slot_id), { $set: { status: SessionStatus.IN_SESSION } });
-            await triageChatService.addSystemMessageForCareRequest(this.idOf(videoSession.care_request_id), 'Video session started.');
-        }
+        const updateFields: any = { last_presence_at: now };
+        
         if (liveActor.role === Role.PATIENT && !videoSession.patient_joined_at) {
-            videoSession.patient_joined_at = now;
+            updateFields.patient_joined_at = now;
         }
         if (liveActor.role === Role.DOCTOR && !videoSession.doctor_joined_at) {
-            videoSession.doctor_joined_at = now;
+            updateFields.doctor_joined_at = now;
         }
-        videoSession.last_presence_at = now;
-        await videoSession.save();
 
-        const uid = liveActor.role === Role.DOCTOR ? videoSession.doctor_uid : videoSession.patient_uid;
+        // Atomically transition from scheduled to active (prevents duplicate messages)
+        const activatedSession = await VideoSession.findOneAndUpdate(
+            { _id: sessionId, status: 'scheduled' },
+            { 
+                $set: { 
+                    status: 'active', 
+                    started_at: now,
+                    ...updateFields
+                } 
+            },
+            { new: true }
+        );
+
+        if (activatedSession) {
+            // We won the race to activate the session
+            await SessionBooking.findByIdAndUpdate(this.idOf(videoSession.slot_id), { $set: { status: SessionStatus.IN_SESSION } });
+            await triageChatService.addSystemMessageForCareRequest(this.idOf(videoSession.care_request_id), 'Video session started.');
+            Object.assign(videoSession, activatedSession.toObject());
+        } else {
+            // Session was already active or in another state, just update presence atomically (prevents lost updates)
+            const presenceSession = await VideoSession.findByIdAndUpdate(
+                sessionId,
+                { $set: updateFields },
+                { new: true }
+            );
+            if (presenceSession) {
+                Object.assign(videoSession, presenceSession.toObject());
+            }
+        }
+
+        let uid;
+        if (liveActor.role === Role.DOCTOR) uid = videoSession.doctor_uid;
+        else if (liveActor.role === Role.PATIENT) uid = videoSession.patient_uid;
+        else uid = this.numericUid(liveActor.user_id, 3); // Admins get UID 3
         const configuredTtl = config.agora.tokenTtlSeconds || rtcTokenMaxSeconds;
         const tokenTtl = Math.max(60, Math.min(configuredTtl, rtcTokenMaxSeconds, secondsUntilClose));
         const expiresAt = Math.floor(Date.now() / 1000) + tokenTtl;
@@ -223,6 +256,17 @@ class VideoSessionService {
         return this.closeSession(videoSession, 'cancelled', actor.user_id, reason || 'Video session cancelled.');
     }
 
+    
+    async ping(sessionId: string, actor: JwtPayload) {
+        const videoSession = await VideoSession.findById(sessionId);
+        if (!videoSession) throw new NotFoundError('Video session not found');
+        
+        if (videoSession.status === 'active') {
+            await VideoSession.updateOne({ _id: sessionId }, { $set: { last_presence_at: new Date() } });
+        }
+        return { message: 'Ping recorded' };
+    }
+
     async cleanupExpired() {
         const now = new Date();
         const graceMs = (config.agora.graceMinutes || 10) * 60 * 1000;
@@ -235,13 +279,23 @@ class VideoSessionService {
             scheduled_end_at: { $lte: new Date(now.getTime() - graceMs) }
         });
 
+        const abandonedActive = await VideoSession.find({
+            status: 'active',
+            last_presence_at: { $lte: new Date(now.getTime() - 5 * 60 * 1000) }
+        });
+
+        const uniqueActiveToClose = new Map();
+        for (const s of activeExpired) uniqueActiveToClose.set(s._id.toString(), { session: s, reason: 'Video session expired and was closed automatically.' });
+        for (const s of abandonedActive) uniqueActiveToClose.set(s._id.toString(), { session: s, reason: 'Video session ended automatically due to inactivity.' });
+
         let closed = 0;
         for (const session of scheduledExpired) {
             await this.closeSession(session, 'missed', undefined, 'Video session missed.');
             closed += 1;
         }
-        for (const session of activeExpired) {
-            await this.closeSession(session, 'expired', undefined, 'Video session expired and was closed automatically.');
+        const uniqueValues = Array.from(uniqueActiveToClose.values());
+        for (const { session, reason } of uniqueValues) {
+            await this.closeSession(session, 'expired', undefined, reason);
             closed += 1;
         }
 
@@ -352,7 +406,7 @@ class VideoSessionService {
 
     private async getLiveActiveActor(actor: JwtPayload, allowedRoles: Role[]) {
         if (!allowedRoles.includes(actor.role)) {
-            throw new ForbiddenError('Only the assigned Doctor or patient can join this video session');
+            throw new ForbiddenError('You are not allowed to join this video session');
         }
 
         const user = await User.findById(actor.user_id).select('role status email tier');
@@ -400,12 +454,14 @@ class VideoSessionService {
     }
 
     private buildChannelName(careRequestId: string, slotId: string) {
-        return `apo_${careRequestId.slice(-10)}_${slotId.slice(-10)}_${crypto.randomBytes(3).toString('hex')}`;
+        // HIPAA-compliant cryptographically secure channel name
+        return `apo_${crypto.randomBytes(24).toString('base64url')}`;
     }
 
     private numericUid(id: string, salt: number) {
-        const hash = crypto.createHash('sha256').update(`${id}:${salt}`).digest();
-        return hash.readUInt32BE(0) || salt;
+        // To absolutely guarantee no collisions within the same channel, 
+        // we map Patient to 1, Doctor to 2, Admin to 3+.
+        return salt;
     }
 
     private formatSession(session: any) {

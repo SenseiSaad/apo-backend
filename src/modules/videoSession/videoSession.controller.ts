@@ -68,6 +68,16 @@ export class VideoSessionController {
         }
     }
 
+    
+    async ping(req: AuthRequest<VideoSessionIdParamInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await videoSessionService.ping(req.params.sessionId, req.user!);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async cleanup(_req: AuthRequest, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await videoSessionService.cleanupExpired();
