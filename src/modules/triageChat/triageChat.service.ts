@@ -329,6 +329,33 @@ class TriageChatService {
         }, this.getRooms(conversation));
     }
 
+    async handleDoctorUnassignment(careRequestId: string, actorUserId: string) {
+        const conversation = await TriageConversation.findOne({ care_request_id: careRequestId });
+        if (!conversation) {
+            return;
+        }
+
+        const previousDoctorUserId = conversation.doctor_user_id?.toString();
+        if (!previousDoctorUserId) {
+            return;
+        }
+
+        conversation.doctor_id = undefined;
+        conversation.doctor_user_id = undefined;
+        await conversation.save();
+
+        await this.createSystemMessage(conversation, 'The assigned Doctor has been removed from this care thread.');
+
+        this.publish('triage:doctor_unassigned', {
+            conversation: await this.formatConversation(conversation._id.toString(), {
+                user_id: actorUserId,
+                role: Role.SUPER_ADMIN,
+                email: '',
+                jti: ''
+            } as JwtPayload)
+        }, this.getRooms(conversation));
+    }
+
     async closeConversationForCareRequest(careRequestId: string, actorUserId: string, reason: string) {
         const conversation = await TriageConversation.findOne({ care_request_id: careRequestId });
         if (!conversation || conversation.status !== 'open') {

@@ -223,6 +223,11 @@ export class PatientAssignmentService {
         patient.care_status_updated_at = new Date();
         await patient.save();
 
+        const careRequestId = await careRequestService.syncUnassignment(patient._id.toString(), actorUserId);
+        if (careRequestId) {
+            await triageChatService.handleDoctorUnassignment(careRequestId, actorUserId);
+        }
+
         return {
             message: 'Patient unassigned from Doctor successfully',
             patient: this.formatPatient(patient)

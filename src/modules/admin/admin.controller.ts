@@ -270,6 +270,15 @@ export class AdminController {
         }
     }
 
+    async getPatientCaseDetails(req: AuthRequest<PatientIdParamInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await careRequestService.getPatientCaseDetails(req.params.patientId);
+            res.json({ success: true, data: result });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getCareRequests(req: AuthRequest<Record<string, never>, Record<string, never>, Record<string, never>, GetCareRequestsQueryInput>, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await careRequestService.listRequests(req.query);

@@ -61,6 +61,7 @@ router.get('/doctors/active', validate(getActiveDoctorsQuerySchema, 'query'), ad
 router.get('/patients/stats', adminController.getPatientManagementStats.bind(adminController));
 router.get('/patients', validate(getPatientsQuerySchema, 'query'), adminController.getPatients.bind(adminController));
 router.get('/patients/assignable', validate(getAssignablePatientsQuerySchema, 'query'), adminController.getAssignablePatients.bind(adminController));
+router.get('/patients/:patientId/case-details', validate(patientIdParamSchema, 'params'), adminController.getPatientCaseDetails.bind(adminController));
 router.get('/care-requests', validate(getCareRequestsQuerySchema, 'query'), adminController.getCareRequests.bind(adminController));
 router.patch(
     '/care-requests/:careRequestId/triage',

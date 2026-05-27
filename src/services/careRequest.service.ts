@@ -4,6 +4,7 @@ import { CareRequest, CareRequestStatus } from '../models/CareRequest.model';
 import { Patient } from '../models/Patient.model';
 import { Doctor as DoctorModel } from '../models/Doctor.model';
 import { SessionBooking } from '../models/SessionBooking.model';
+import { TriageConversation } from '../models/TriageChat.model';
 import { User } from '../models/User.model';
 import { Role, SessionStatus, UserStatus } from '../models/enums';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
@@ -457,6 +458,139 @@ export class CareRequestService {
         };
     }
 
+    async getPatientCaseDetails(patientId: string) {
+        const patient = await Patient.findById(patientId)
+            .populate('user_id', 'email role status tier email_verified created_at updated_at')
+            .populate({
+                path: 'doctor_id',
+                select: 'user_id specialty credential_status personal_info max_patients',
+                populate: { path: 'user_id', select: 'email status' }
+            })
+            .populate('doctor_assigned_by', 'email role')
+            .lean();
+
+        if (!patient) {
+            throw new NotFoundError('Patient not found');
+        }
+
+        const requests = await CareRequest.find({ patient_id: patient._id })
+            .sort({ created_at: -1 })
+            .populate({
+                path: 'patient_id',
+                populate: { path: 'user_id', select: 'email role status tier' }
+            })
+            .populate({
+                path: 'doctor_id',
+                populate: { path: 'user_id', select: 'email status' }
+            })
+            .populate('claimed_by', 'email role status')
+            .populate({
+                path: 'claimed_assistant_id',
+                select: 'user_id permissions assigned_doctor_ids',
+                populate: { path: 'user_id', select: 'email status' }
+            })
+            .populate('assigned_by', 'email role')
+            .populate('closed_by', 'email role')
+            .lean();
+
+        const requestIds = requests.map((request: any) => request._id);
+        const conversations = await TriageConversation.find({ care_request_id: { $in: requestIds } })
+            .populate('assistant_user_id', 'email status role')
+            .populate('doctor_user_id', 'email status role')
+            .lean();
+        const conversationByRequestId = new Map(conversations.map((conversation: any) => [conversation.care_request_id.toString(), conversation]));
+
+        const closedCount = requests.filter(request => closedRequestStatuses.includes(request.status)).length;
+        const openCount = requests.filter(request => openRequestStatuses.includes(request.status)).length;
+        const user = patient.user_id as any;
+        const doctor = patient.doctor_id as any;
+        const doctorUser = doctor?.user_id;
+        const assignedBy = patient.doctor_assigned_by as any;
+
+        return {
+            patient: {
+                patient_id: patient._id.toString(),
+                user_id: user?._id?.toString(),
+                name: patient.full_name || this.formatNameFromEmail(user?.email || ''),
+                email: user?.email,
+                account_status: user?.status,
+                tier: user?.tier,
+                email_verified: user?.email_verified,
+                care_status: patient.care_status,
+                illness_description: patient.illness_description,
+                care_status_updated_at: patient.care_status_updated_at,
+                onboarding_source: patient.onboarding_source,
+                date_of_birth: patient.date_of_birth,
+                phone_number: patient.phone_number,
+                timezone: patient.timezone,
+                preferences: patient.preferences,
+                avatar_state: patient.avatar_state,
+                activity_score: patient.activity_score,
+                current_streak: patient.current_streak,
+                last_active: patient.last_active,
+                doctor: doctor ? {
+                    doctor_id: doctor._id.toString(),
+                    user_id: doctorUser?._id?.toString(),
+                    name: doctor.personal_info?.full_name || this.formatNameFromEmail(doctorUser?.email || ''),
+                    email: doctorUser?.email,
+                    status: doctorUser?.status,
+                    specialty: doctor.specialty,
+                    credential_status: doctor.credential_status,
+                    max_patients: doctor.max_patients,
+                    assigned_at: patient.doctor_assigned_at,
+                    assigned_by_email: assignedBy?.email,
+                    assignment_source: patient.doctor_assignment_source
+                } : null,
+                created_at: patient.created_at,
+                updated_at: patient.updated_at
+            },
+            summary: {
+                total_cases: requests.length,
+                open_cases: openCount,
+                closed_cases: closedCount,
+                latest_case_id: requests[0]?._id?.toString() || null
+            },
+            cases: requests.map((request: any) => {
+                const conversation = conversationByRequestId.get(request._id.toString()) as any;
+                const claimedAssistant = request.claimed_assistant_id as any;
+                const assistantUser = claimedAssistant?.user_id;
+                const assignedByUser = request.assigned_by as any;
+                const closedByUser = request.closed_by as any;
+
+                return {
+                    ...this.formatRequest(request),
+                    assistant: conversation?.assistant_user_id || assistantUser || request.claimed_by ? {
+                        assistant_id: claimedAssistant?._id?.toString() || conversation?.assistant_id?.toString() || null,
+                        user_id: conversation?.assistant_user_id?._id?.toString() || assistantUser?._id?.toString() || request.claimed_by?._id?.toString() || null,
+                        email: conversation?.assistant_user_id?.email || assistantUser?.email || request.claimed_by?.email || null,
+                        status: conversation?.assistant_user_id?.status || assistantUser?.status || request.claimed_by?.status || null,
+                        claimed_at: request.claimed_at,
+                        claim_expires_at: request.claim_expires_at
+                    } : null,
+                    assigned_by_email: assignedByUser?.email || null,
+                    closed_by_email: closedByUser?.email || null,
+                    conversation: conversation ? {
+                        conversation_id: conversation._id.toString(),
+                        status: conversation.status,
+                        assistant_user_id: conversation.assistant_user_id?._id?.toString() || conversation.assistant_user_id?.toString() || null,
+                        assistant_email: conversation.assistant_user_id?.email || null,
+                        doctor_user_id: conversation.doctor_user_id?._id?.toString() || conversation.doctor_user_id?.toString() || null,
+                        doctor_email: conversation.doctor_user_id?.email || null,
+                        doctor_handoff_notes: conversation.doctor_handoff_notes || '',
+                        doctor_handoff: conversation.doctor_handoff || {},
+                        patient_unread_count: conversation.patient_unread_count,
+                        assistant_unread_count: conversation.assistant_unread_count,
+                        admin_unread_count: conversation.admin_unread_count,
+                        last_message_at: conversation.last_message_at,
+                        closed_at: conversation.closed_at,
+                        created_at: conversation.created_at,
+                        updated_at: conversation.updated_at
+                    } : null
+                };
+            })
+        };
+    }
+
     async claimForAssistant(requestId: string, assistantUserId: string) {
         const allowedDoctorIds = await this.assertAssistantCanTriage(assistantUserId);
         const assistant = await Assistant.findOne({ user_id: assistantUserId });
@@ -779,6 +913,29 @@ export class CareRequestService {
         return request._id.toString();
     }
 
+    async syncUnassignment(patientId: string, actorUserId: string) {
+        const request = await CareRequest.findOne({
+            patient_id: patientId,
+            status: { $in: openRequestStatuses }
+        }).sort({ created_at: -1 });
+
+        if (!request) {
+            return null;
+        }
+
+        request.doctor_id = undefined;
+        request.assigned_by = undefined;
+        request.assigned_at = undefined;
+        
+        // Revert status based on previous triage state. 
+        // If it was just assigned from new_request, it might go back to new_request.
+        // Assuming pending_assignment is the default fallback for unassigned open requests.
+        request.status = 'pending_assignment'; 
+        
+        await request.save();
+        return request._id.toString();
+    }
+
     private async markPatientNeedsCare(patient: any, reason: string) {
         patient.illness_description = reason;
         patient.care_status = patient.doctor_id ? 'assigned' : 'needs_care';
@@ -821,6 +978,8 @@ export class CareRequestService {
             doctor_id: doctor?._id?.toString() || request.doctor_id?.toString() || null,
             doctor_name: doctor?.personal_info?.full_name || this.formatNameFromEmail(doctorUser?.email || ''),
             doctor_email: doctorUser?.email,
+            doctor_specialty: doctor?.specialty || null,
+            doctor_credential_status: doctor?.credential_status || null,
             claimed_by_user_id: claimedBy?._id?.toString() || request.claimed_by?.toString() || null,
             claimed_by_email: claimedBy?.email || null,
             claimed_at: request.claimed_at,
