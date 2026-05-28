@@ -33,13 +33,17 @@ class VideoSessionService {
 
     async listAvailableSlots(careRequestId: string, actor: JwtPayload, query: { start_date?: string; end_date?: string }) {
         const request = await this.getAuthorizedCareRequest(careRequestId, actor, true);
-        if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN) {
-            throw new ForbiddenError('Only the assigned Doctor or admin can schedule video sessions');
+        if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN && actor.role !== Role.PATIENT) {
+            throw new ForbiddenError('Only the assigned Doctor, Patient, or Admin can list available slots');
         }
 
         const now = new Date();
         const startDate = query.start_date ? new Date(`${query.start_date}T00:00:00Z`) : now;
         const endDate = query.end_date ? new Date(`${query.end_date}T23:59:59Z`) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+        if (!request.doctor_id) {
+            return { slots: [] };
+        }
 
         const slots = await SessionBooking.find({
             doctor_id: request.doctor_id,
@@ -177,8 +181,8 @@ class VideoSessionService {
 
     async create(actor: JwtPayload, data: { care_request_id: string; slot_id: string }) {
         const request = await this.getAuthorizedCareRequest(data.care_request_id, actor, true);
-        if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN) {
-            throw new ForbiddenError('Only the assigned Doctor or admin can schedule video sessions');
+        if (actor.role !== Role.DOCTOR && actor.role !== Role.SUPER_ADMIN && actor.role !== Role.PATIENT) {
+            throw new ForbiddenError('Only the assigned Doctor, Patient, or Admin can schedule video sessions');
         }
         if (!request.doctor_id) {
             throw new BadRequestError('Assign a Doctor before scheduling video');

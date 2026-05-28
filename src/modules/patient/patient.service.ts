@@ -6,6 +6,7 @@ import { SessionBooking } from '../../models/SessionBooking.model';
 import { ChatSession } from '../../models/ChatSession.model';
 import { Subscription } from '../../models/Subscription.model';
 import { InviteToken } from '../../models/InviteToken.model';
+import { CareRequest } from '../../models/CareRequest.model';
 import { decrypt } from '../../utils/encryption';
 import { redisService } from '../../services/redis.service';
 import { avatarService } from '../../services/avatar.service';
@@ -337,8 +338,11 @@ export class PatientService {
         // Calculate streak status
         const streak_status = this.calculateStreakStatus(patient);
 
+        const active_request = await CareRequest.findOne({ patient_id, status: { $in: ['new_request', 'triage_claimed', 'triage_in_progress', 'pending_assignment', 'assigned', 'in_treatment', 'follow_up_needed', 'patient_requested_closure'] } });
+
         return {
             patient_id: patient._id.toString(),
+            active_care_request_id: active_request ? active_request._id.toString() : null,
             avatar_state: patient.avatar_state,
             has_avatar: Boolean(patient.avatar_state?.gender && patient.avatar_state?.storage_key),
             activity_score: patient.activity_score,
