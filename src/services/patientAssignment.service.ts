@@ -198,6 +198,18 @@ export class PatientAssignmentService {
         patient.care_status = 'assigned';
         patient.care_status_updated_at = new Date();
         await patient.save();
+
+        // Auto-accept any pending invites from this Doctor to this Patient's email
+        const patientUserDoc = await mongoose.model('User').findById(patient.user_id);
+        if (patientUserDoc) {
+            const { decrypt } = await import('../utils/encryption');
+            const patientEmail = decrypt(patientUserDoc.email).toLowerCase();
+            await mongoose.model('InviteToken').updateMany(
+                { email: patientEmail, doctor_id: doctor._id, status: 'pending' },
+                { $set: { status: 'accepted', used_at: new Date(), patient_id: patient._id } }
+            );
+        }
+
         const careRequestId = await careRequestService.syncAssignment(patient._id.toString(), doctor._id.toString(), input.actorUserId);
         if (careRequestId) {
             await triageChatService.onboardDoctorForCareRequest(careRequestId, input.actorUserId);
