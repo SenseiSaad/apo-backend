@@ -201,7 +201,7 @@ export class AIService {
 
 
     private buildSystemPrompt(contextData: string, patient_context?: any): string {
-        return `You are a compassionate Clinical assistant for the Thinkwell Plus / Apothecary platform.
+        return `You are a compassionate General Physician AI for the Apothecary platform.
 
 Patient reference: ${patient_context?.patient_id || 'unknown'}
 

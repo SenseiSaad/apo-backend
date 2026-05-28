@@ -30,13 +30,13 @@ export class ChatService {
         // Check token limit for free users
         if (user.tier === Tier.FREE) {
             const tokens_used = await redisService.getChatTokensUsedToday(patient._id.toString());
-            if (tokens_used >= 2000) {
+            if (tokens_used >= 50000) {
                 return {
                     error: true,
                     code: 'DAILY_TOKEN_LIMIT',
                     message: 'Daily chat limit reached. Upgrade to continue chatting.',
                     tokens_used,
-                    token_limit: 2000
+                    token_limit: 50000
                 };
             }
         }
@@ -145,13 +145,13 @@ export class ChatService {
         // Check token limit for free users
         if (user.tier === Tier.FREE) {
             const tokens_used = await redisService.getChatTokensUsedToday(patient._id.toString());
-            if (tokens_used >= 2000) {
+            if (tokens_used >= 50000) {
                 res.write(`data: ${JSON.stringify({
                     error: true,
                     code: 'DAILY_TOKEN_LIMIT',
                     message: 'Daily chat limit reached. Upgrade to continue chatting.',
                     tokens_used,
-                    token_limit: 2000
+                    token_limit: 50000
                 })}\n\n`);
                 res.end();
                 return;
