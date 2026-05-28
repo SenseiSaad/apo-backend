@@ -30,13 +30,13 @@ export class ChatService {
         // Check token limit for free users
         if (user.tier === Tier.FREE) {
             const tokens_used = await redisService.getChatTokensUsedToday(patient._id.toString());
-            if (tokens_used >= 50) {
+            if (tokens_used >= 2000) {
                 return {
                     error: true,
                     code: 'DAILY_TOKEN_LIMIT',
                     message: 'Daily chat limit reached. Upgrade to continue chatting.',
                     tokens_used,
-                    token_limit: 50
+                    token_limit: 2000
                 };
             }
         }
@@ -106,7 +106,7 @@ export class ChatService {
         }
 
         const tokens_used_today = await redisService.getChatTokensUsedToday(patient._id.toString());
-        const token_limit = user.tier === Tier.FREE ? 50 : user.tier === Tier.BASIC ? 200 : 999999;
+        const token_limit = user.tier === Tier.FREE ? 2000 : user.tier === Tier.BASIC ? 10000 : 999999;
 
         return {
             session_id: session._id.toString(),
@@ -145,13 +145,13 @@ export class ChatService {
         // Check token limit for free users
         if (user.tier === Tier.FREE) {
             const tokens_used = await redisService.getChatTokensUsedToday(patient._id.toString());
-            if (tokens_used >= 50) {
+            if (tokens_used >= 2000) {
                 res.write(`data: ${JSON.stringify({
                     error: true,
                     code: 'DAILY_TOKEN_LIMIT',
                     message: 'Daily chat limit reached. Upgrade to continue chatting.',
                     tokens_used,
-                    token_limit: 50
+                    token_limit: 2000
                 })}\n\n`);
                 res.end();
                 return;
@@ -250,7 +250,7 @@ export class ChatService {
         }
 
         const tokens_used_today = await redisService.getChatTokensUsedToday(patient._id.toString());
-        const token_limit = user.tier === Tier.FREE ? 50 : user.tier === Tier.BASIC ? 200 : 999999;
+        const token_limit = user.tier === Tier.FREE ? 2000 : user.tier === Tier.BASIC ? 10000 : 999999;
 
         logger.info(`Chat streamed for patient ${patient._id}, session ${session._id}`);
 

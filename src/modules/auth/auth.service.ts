@@ -70,11 +70,18 @@ export class AuthService {
             if (inviteData.email.toLowerCase() !== data.email.toLowerCase()) {
                 throw new BadRequestError('Email does not match invite');
             }
+        } else if (data.role === Role.PATIENT) {
+            // Auto-consume pending invite for this email if it exists
+            inviteData = await InviteToken.findOne({
+                email: data.email.toLowerCase(),
+                status: 'pending',
+                used_at: null,
+                expires_at: { $gt: new Date() }
+            }).sort({ created_at: -1 });
         }
 
         // Hash password
         const password_hash = await bcrypt.hash(data.password, 12);
-
         // Create user
         const user = await User.create({
             email: data.email.toLowerCase(),
@@ -138,11 +145,14 @@ export class AuthService {
 
         // Mark invite as used
         if (inviteData) {
+            if (data.role === Role.PATIENT) {
+                const patient = await Patient.findOne({ user_id: user._id });
+                if (patient) inviteData.patient_id = patient._id;
+            }
             inviteData.status = 'accepted';
             inviteData.used_at = new Date();
             await inviteData.save();
         }
-
         // Auto-verify in development if configured
         const shouldAutoVerify = AUTO_VERIFY_IN_DEV || SKIP_EMAIL_VERIFICATION;
         
