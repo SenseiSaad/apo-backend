@@ -466,7 +466,11 @@ export class PatientService {
             throw new NotFoundError('User not found');
         }
 
-        const invites = await InviteToken.find({ email: user.email.toLowerCase() })
+        // user.email is stored encrypted; InviteToken.email stores the plain email.
+        // We must decrypt to get the plain email for the query.
+        const plainEmail = decrypt(user.email).toLowerCase();
+
+        const invites = await InviteToken.find({ email: plainEmail })
             .populate({
                 path: 'doctor_id',
                 select: 'user_id specialty',
@@ -629,13 +633,21 @@ export class PatientService {
         const Doctor = invite.doctor_id as any;
         const DoctorUser = Doctor?.user_id as any;
 
+        // doctor email is stored encrypted; decrypt before returning to the client
+        let doctorEmail: string | undefined;
+        try {
+            doctorEmail = DoctorUser?.email ? decrypt(DoctorUser.email) : undefined;
+        } catch {
+            doctorEmail = undefined;
+        }
+
         return {
             invite_id: invite._id.toString(),
             email: invite.email,
             status: this.getInviteStatus(invite),
             Doctor: Doctor ? {
                 doctor_id: Doctor._id?.toString(),
-                email: DoctorUser?.email,
+                email: doctorEmail,
                 specialty: Doctor.specialty
             } : null,
             expires_at: invite.expires_at,

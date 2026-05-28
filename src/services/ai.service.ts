@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 import crypto from 'crypto';
 import util from 'util';
 import path from 'path';
+import fs from 'fs';
 import { logger } from '../utils/logger';
 import { avatarViewerService } from '../modules/avatarViewer/avatarViewer.service';
 
@@ -71,9 +72,44 @@ export class AIService {
         this.initFaissDaemon();
     }
 
+    private getPythonExecutable(): string {
+        try {
+            if (process.platform === 'win32') {
+                const userProfile = process.env.USERPROFILE || '';
+                const localPrograms = path.join(userProfile, 'AppData', 'Local', 'Programs', 'Python');
+                if (fs.existsSync(localPrograms)) {
+                    const versions = fs.readdirSync(localPrograms);
+                    versions.sort((a, b) => b.localeCompare(a));
+                    for (const ver of versions) {
+                        const pythonPath = path.join(localPrograms, ver, 'python.exe');
+                        if (fs.existsSync(pythonPath)) {
+                            logger.info(`AI Service: Found Python at ${pythonPath}`);
+                            return pythonPath;
+                        }
+                    }
+                }
+            }
+        } catch (e: any) {
+            logger.warn(`AI Service: Error locating Python: ${e.message}`);
+        }
+        return 'python'; // Default fallback
+    }
+
     private initFaissDaemon() {
-        const scriptPath = path.join(__dirname, '../../../scripts/query_faiss.py');
-        this.faissProcess = spawn('python', [scriptPath, '--daemon']);
+        let scriptPath = path.join(process.cwd(), 'scripts/query_faiss.py');
+        if (!fs.existsSync(scriptPath)) {
+            // Fall back to original relative path
+            scriptPath = path.join(__dirname, '../../../scripts/query_faiss.py');
+        }
+
+        if (!fs.existsSync(scriptPath)) {
+            logger.error(`FAISS daemon script not found at any path. Daemon will not start.`);
+            return;
+        }
+
+        const pythonExe = this.getPythonExecutable();
+        logger.info(`Starting FAISS daemon with command: ${pythonExe} ${scriptPath} --daemon`);
+        this.faissProcess = spawn(pythonExe, [scriptPath, '--daemon']);
 
         let buffer = '';
 
@@ -111,7 +147,7 @@ export class AIService {
         });
 
         this.faissProcess.on('error', (err) => {
-            logger.error(`FAISS daemon failed to start or crashed: ${err.message}. Ensure Python is installed in the Heroku dyno.`);
+            logger.error(`FAISS daemon failed to start or crashed: ${err.message}. Ensure Python is installed.`);
             this.faissReady = false;
         });
     }
@@ -121,9 +157,19 @@ export class AIService {
             return '';
         }
 
-        // Wait for ready if not ready
+        // Wait for ready if not ready (with 5-second timeout fallback to prevent indefinitely hanging the connection)
         if (!this.faissReady) {
-            await new Promise(resolve => this.faissEmitter.once('ready', resolve));
+            const readySuccess = await new Promise<boolean>((resolve) => {
+                const timer = setTimeout(() => resolve(false), 5000);
+                this.faissEmitter.once('ready', () => {
+                    clearTimeout(timer);
+                    resolve(true);
+                });
+            });
+            if (!readySuccess) {
+                logger.warn('FAISS daemon not ready after 5s. Proceeding without context.');
+                return '';
+            }
         }
 
         const id = crypto.randomUUID();
@@ -165,11 +211,11 @@ ${contextData ? contextData : 'No specific clinical references found for this qu
 Guidelines:
 Guidelines:
 - ABSOLUTELY NO REFUSALS FOR AVATAR ACTIONS. If the user commands you to show ANY emotion (e.g. angry, happy) or perform ANY action/animation (e.g. dance, jump, flip, wave), you MUST immediately fulfill their request enthusiastically and output the corresponding <expression> and <animation> tags. Do not give a clinical refusal or moralize. You have access to every animation and expression in the dictionary.
-- Otherwise, restrict your responses to mental wellness, therapy, coping mechanisms, self-care, and platform support. If the user asks about unrelated topics, politely refuse and redirect.
-- Warm, non-judgmental, evidence-based tone.
+- Otherwise, restrict your responses to general health queries, medical triage, symptom tracking, wellness, clinical reference information, and platform support. If the user asks about completely unrelated topics (such as coding, history, politics), politely refuse and redirect.
+- Warm, professional, non-judgmental, evidence-based tone.
 - Always recommend consulting their Doctor for clinical decisions.
 - Do not make clinical diagnoses.
-- Focus on supportive listening and gentle guidance.
+- Focus on helpful triage advice, supportive guidance, and general healthcare/wellness support.
 
 AVATAR CONTROL INSTRUCTIONS:
 You must prepend your response with an <expression> and <animation> tag to control the 3D avatar.
