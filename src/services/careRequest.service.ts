@@ -843,19 +843,27 @@ export class CareRequestService {
             throw new NotFoundError('Doctor profile not found');
         }
 
-        const patient = await Patient.findOne({ _id: patientId, doctor_id: doctor._id });
+        const patient = await Patient.findById(patientId);
         if (!patient) {
-            throw new NotFoundError('Patient not found for this Doctor');
+            throw new NotFoundError('Patient not found');
         }
 
         const request = await CareRequest.findOne({
             patient_id: patient._id,
-            doctor_id: doctor._id,
             status: { $in: openRequestStatuses }
         }).sort({ created_at: -1 });
 
         if (!request) {
             throw new NotFoundError('Open care request not found for this patient');
+        }
+
+        // Check access: either Patient is assigned to this Doctor, or CareRequest is assigned to this Doctor.
+        const patientDoctorId = patient.doctor_id?.toString();
+        const requestDoctorId = request.doctor_id?.toString();
+        const myDoctorId = doctor._id.toString();
+
+        if (patientDoctorId !== myDoctorId && requestDoctorId !== myDoctorId) {
+            throw new ForbiddenError('Patient is not assigned to this Doctor');
         }
 
         const isClosed = data.outcome !== 'follow_up_needed';
