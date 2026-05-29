@@ -186,13 +186,18 @@ class TriageChatService {
         if (senderRole === 'patient') {
             update.$inc = { assistant_unread_count: 1, admin_unread_count: 1 };
             void this.notifyAssistant(conversation);
+            void this.notifyDoctor(conversation);
         } else if (senderRole === 'assistant') {
             update.$inc = { patient_unread_count: 1, admin_unread_count: 1 };
             void this.notifyPatient(conversation);
+            void this.notifyDoctor(conversation);
         } else if (senderRole === 'admin') {
             update.$inc = { patient_unread_count: 1, assistant_unread_count: 1 };
+            void this.notifyDoctor(conversation);
         } else if (senderRole === 'doctor') {
             update.$inc = { patient_unread_count: 1, assistant_unread_count: 1, admin_unread_count: 1 };
+            void this.notifyPatient(conversation);
+            void this.notifyAssistant(conversation);
         }
         const updatedConversation = await TriageConversation.findByIdAndUpdate(conversation._id, update, { new: true });
 
@@ -591,9 +596,21 @@ class TriageChatService {
         await notificationService.send({
             userId: conversation.assistant_user_id.toString(),
             type: NotificationType.TRIAGE_MESSAGE,
-            title: 'New Patient Reply',
-            body: 'A patient replied in triage chat.',
-            link: '/dashboard/doctor/chat' // Assistants use the doctor chat route
+            title: 'New Chat Message',
+            body: 'There is a new message in triage chat.',
+            link: `/dashboard/doctor/chat?thread=${conversation._id}`
+        });
+    }
+
+    private async notifyDoctor(conversation: any) {
+        if (!conversation.doctor_user_id) return;
+        const { notificationService } = await import('../../services/notification.service');
+        await notificationService.send({
+            userId: conversation.doctor_user_id.toString(),
+            type: NotificationType.TRIAGE_MESSAGE,
+            title: 'New Chat Message',
+            body: 'There is a new message in triage chat.',
+            link: `/dashboard/doctor/chat?thread=${conversation._id}`
         });
     }
 
