@@ -279,6 +279,8 @@ export class PatientAssignmentService {
             throw new NotFoundError('Patient not found');
         }
 
+        const previousDoctorId = patient.doctor_id;
+
         patient.doctor_id = undefined;
         patient.doctor_assigned_at = undefined;
         patient.doctor_assigned_by = new mongoose.Types.ObjectId(actorUserId);
@@ -290,6 +292,44 @@ export class PatientAssignmentService {
         const careRequestId = await careRequestService.syncUnassignment(patient._id.toString(), actorUserId);
         if (careRequestId) {
             await triageChatService.handleDoctorUnassignment(careRequestId, actorUserId);
+        }
+
+        // Dispatch Unassignment Notifications
+        try {
+            const { notificationService } = await import('./notification.service');
+            const { NotificationType } = await import('../models/enums');
+            
+            // Notify Patient
+            if (patient.user_id) {
+                const patientUserId = typeof patient.user_id === 'object' && '_id' in (patient.user_id as any)
+                    ? (patient.user_id as any)._id.toString() 
+                    : patient.user_id.toString();
+                    
+                await notificationService.send({
+                    userId: patientUserId,
+                    type: NotificationType.CARE_REQUEST,
+                    title: 'Doctor Unassigned',
+                    body: 'Your doctor assignment has been updated by the administration. You will be matched with a new doctor shortly.',
+                    link: '/dashboard/patient'
+                });
+            }
+
+            // Notify Previous Doctor
+            if (previousDoctorId) {
+                const Doctor = await import('../models/Doctor.model').then(m => m.Doctor);
+                const prevDoc = await Doctor.findById(previousDoctorId);
+                if (prevDoc && prevDoc.user_id) {
+                    await notificationService.send({
+                        userId: prevDoc.user_id.toString(),
+                        type: NotificationType.CARE_REQUEST,
+                        title: 'Patient Unassigned',
+                        body: `Patient ${patient.full_name || 'A patient'} has been unassigned from your care list.`,
+                        link: '/dashboard/doctor/patients'
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to send unassignment notifications:', error);
         }
 
         return {

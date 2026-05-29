@@ -66,7 +66,7 @@ class TriageChatService {
         };
     }
 
-    async listConversations(actor: JwtPayload, query: { status?: string; page: number; limit: number }) {
+    async listConversations(actor: JwtPayload, query: { status?: string; assistant_user_id?: string; patient_id?: string; page: number; limit: number }) {
         const page = query.page;
         const limit = query.limit;
         const skip = (page - 1) * limit;
@@ -86,7 +86,14 @@ class TriageChatService {
             match.assistant_user_id = new mongoose.Types.ObjectId(actor.user_id);
         } else if (actor.role === Role.DOCTOR) {
             match.doctor_user_id = new mongoose.Types.ObjectId(actor.user_id);
-        } else if (actor.role !== Role.SUPER_ADMIN) {
+        } else if (actor.role === Role.SUPER_ADMIN) {
+            if (query.assistant_user_id) {
+                match.assistant_user_id = new mongoose.Types.ObjectId(query.assistant_user_id);
+            }
+            if (query.patient_id) {
+                match.patient_id = new mongoose.Types.ObjectId(query.patient_id);
+            }
+        } else {
             throw new ForbiddenError('Only patients, Doctors, Assistants, and admins can access triage chat');
         }
 

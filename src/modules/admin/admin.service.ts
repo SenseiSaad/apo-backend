@@ -1332,6 +1332,53 @@ export class AdminService {
             status: user.status
         };
     }
+
+    async getAssistantHistory(assistantId: string) {
+        const AssistantModel = await import('../../models/Assistant.model').then(m => m.Assistant);
+        const Assistant = await AssistantModel.findById(assistantId);
+        if (!Assistant) {
+            throw new NotFoundError('Assistant not found');
+        }
+
+        const { CareRequest } = await import('../../models/CareRequest.model');
+        const { Patient } = await import('../../models/Patient.model');
+
+        const allRequests = await CareRequest.find({ claimed_assistant_id: assistantId }).lean();
+        
+        const totalClaimed = allRequests.length;
+        const completedRequests = allRequests.filter(r => r.status === 'completed' || r.status === 'closed_by_patient' || r.status === 'referred_out').length;
+        
+        const patientIds = [...new Set(allRequests.map(r => r.patient_id.toString()))];
+        
+        const patients = await Patient.find({ _id: { $in: patientIds } })
+            .populate('user_id', 'email')
+            .lean();
+            
+        const patientsWorkedWith = patients.map((p: any) => {
+            const reqs = allRequests.filter(r => r.patient_id.toString() === p._id.toString());
+            const sortedReqs = reqs.sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+            return {
+                patient_id: p._id.toString(),
+                email: p.user_id?.email,
+                name: p.full_name || 'Patient',
+                care_status: p.care_status,
+                requests_handled: reqs.length,
+                last_request_at: sortedReqs[0]?.created_at
+            };
+        }).sort((a,b) => new Date(b.last_request_at).getTime() - new Date(a.last_request_at).getTime());
+
+        const assignedDoctors = Assistant.assigned_doctor_ids || [];
+
+        return {
+            stats: {
+                total_claimed: totalClaimed,
+                completed: completedRequests,
+                unique_patients: patientIds.length,
+                assigned_doctors_count: assignedDoctors.length
+            },
+            patients: patientsWorkedWith
+        };
+    }
 }
 
 export const adminService = new AdminService();

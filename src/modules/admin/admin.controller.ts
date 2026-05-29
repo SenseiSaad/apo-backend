@@ -441,6 +441,19 @@ export class AdminController {
         }
     }
 
+    async getAssistantHistory(req: AuthRequest<assistantIdParamInput>, res: Response, next: NextFunction): Promise<void> {
+        try {
+            const result = await adminService.getAssistantHistory(req.params.assistantId);
+
+            res.json({
+                success: true,
+                data: result
+            });
+        } catch (error) {
+            next(error);
+        }
+    }
+
     async getAssistantDetails(req: AuthRequest<assistantIdParamInput>, res: Response, next: NextFunction): Promise<void> {
         try {
             const result = await adminService.getAssistantDetails(req.params.assistantId);

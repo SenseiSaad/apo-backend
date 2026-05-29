@@ -10,6 +10,8 @@ export const careRequestIdParamSchema = z.object({
 
 export const listTriageConversationsQuerySchema = z.object({
     status: z.enum(['open', 'closed', 'archived', 'all']).optional().default('open'),
+    assistant_user_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid assistant user ID').optional(),
+    patient_id: z.string().regex(/^[0-9a-fA-F]{24}$/, 'Invalid patient ID').optional(),
     page: z.preprocess(
         value => value === undefined ? undefined : Number(value),
         z.number().int().min(1).optional().default(1)

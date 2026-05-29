@@ -102,6 +102,7 @@ router.post(
 router.get('/assistants/active', validate(getActiveAssistantsQuerySchema, 'query'), adminController.getActiveAssistants.bind(adminController));
 router.post('/assistants', validate(createAssistantAccountSchema), adminController.createAssistantAccount.bind(adminController));
 router.get('/assistants/:assistantId', validate(assistantIdParamSchema, 'params'), adminController.getAssistantDetails.bind(adminController));
+router.get('/assistants/:assistantId/history', validate(assistantIdParamSchema, 'params'), adminController.getAssistantHistory.bind(adminController));
 router.patch('/assistants/:assistantId', validate(assistantIdParamSchema, 'params'), validate(updateAssistantSchema), adminController.updateAssistant.bind(adminController));
 router.put(
     '/assistants/:assistantId/doctors',
