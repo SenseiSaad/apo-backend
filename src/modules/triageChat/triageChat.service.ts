@@ -575,21 +575,25 @@ class TriageChatService {
     private async notifyPatient(conversation: any) {
         const patient = await Patient.findById(conversation.patient_id);
         if (!patient) return;
-        await Notification.create({
-            user_id: patient.user_id,
+        const { notificationService } = await import('../../services/notification.service');
+        await notificationService.send({
+            userId: patient.user_id.toString(),
             type: NotificationType.TRIAGE_MESSAGE,
-            title: 'New care team message',
-            body: 'Your care team sent a new triage message.'
+            title: 'New Care Team Message',
+            body: 'Your care team sent a new triage message.',
+            link: '/dashboard/patient/chat' // Assuming patient has a chat route
         });
     }
 
     private async notifyAssistant(conversation: any) {
         if (!conversation.assistant_user_id) return;
-        await Notification.create({
-            user_id: conversation.assistant_user_id,
+        const { notificationService } = await import('../../services/notification.service');
+        await notificationService.send({
+            userId: conversation.assistant_user_id.toString(),
             type: NotificationType.TRIAGE_MESSAGE,
-            title: 'New patient reply',
-            body: 'A patient replied in triage chat.'
+            title: 'New Patient Reply',
+            body: 'A patient replied in triage chat.',
+            link: '/dashboard/doctor/chat' // Assistants use the doctor chat route
         });
     }
 

@@ -663,6 +663,20 @@ export class CareRequestService {
             throw new ConflictError('This request changed while you were claiming it. Refresh the queue and try again.');
         }
 
+        // Notify the patient that their request was claimed
+        const patientObj = await Patient.findById(claimedRequest.patient_id).populate('user_id');
+        if (patientObj && patientObj.user_id) {
+            const patientUserId = (patientObj.user_id as any)._id ? (patientObj.user_id as any)._id.toString() : patientObj.user_id.toString();
+            const { notificationService } = await import('./notification.service');
+            await notificationService.send({
+                userId: patientUserId,
+                type: NotificationType.CARE_REQUEST,
+                title: 'Request Claimed',
+                body: 'A clinical assistant is reviewing your request and will follow up shortly.',
+                link: '/dashboard/patient'
+            });
+        }
+
         return {
             message: 'Care request claimed',
             care_request: await this.getFormattedRequest(requestId)
