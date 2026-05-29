@@ -116,42 +116,34 @@ export class CareRequestService {
         }
 
         const hasAssignedDoctor = Boolean(request.doctor_id || patient.doctor_id);
-        request.status = hasAssignedDoctor ? 'patient_requested_closure' : 'closed_by_patient';
+        request.status = 'closed_by_patient';
         request.requested_closure_at = new Date();
-        if (!hasAssignedDoctor) {
-            request.closed_at = new Date();
-            request.closed_by = patient.user_id;
-            request.claimed_by = undefined;
-            request.claimed_assistant_id = undefined;
-            request.claimed_at = undefined;
-            request.claim_expires_at = undefined;
-        }
+        request.closed_at = new Date();
+        request.closed_by = patient.user_id;
+        request.claimed_by = undefined;
+        request.claimed_assistant_id = undefined;
+        request.claimed_at = undefined;
+        request.claim_expires_at = undefined;
         await request.save();
 
         patient.care_status = hasAssignedDoctor ? 'assigned' : 'treated';
         patient.care_status_updated_at = new Date();
-        if (!hasAssignedDoctor) {
-            patient.doctor_id = undefined;
-            patient.doctor_assigned_at = undefined;
-        }
         await patient.save();
 
         this.notifyCareRequest(patient, 'closed').catch(err => console.error(err));
 
-        if (!hasAssignedDoctor) {
-            const { triageChatService } = await import('../modules/triageChat/triageChat.service');
-            await triageChatService.closeConversationForCareRequest(
-                request._id.toString(),
-                userId,
-                'Patient marked that care is no longer needed. Triage chat closed.'
-            );
-            const { videoSessionService } = await import('../modules/videoSession/videoSession.service');
-            await videoSessionService.cancelOpenSessionsForCareRequest(
-                request._id.toString(),
-                userId,
-                'Patient marked that care is no longer needed. Video session cancelled.'
-            );
-        }
+        const { triageChatService } = await import('../modules/triageChat/triageChat.service');
+        await triageChatService.closeConversationForCareRequest(
+            request._id.toString(),
+            userId,
+            'Patient marked that care is no longer needed. Triage chat closed.'
+        );
+        const { videoSessionService } = await import('../modules/videoSession/videoSession.service');
+        await videoSessionService.cancelOpenSessionsForCareRequest(
+            request._id.toString(),
+            userId,
+            'Patient marked that care is no longer needed. Video session cancelled.'
+        );
 
         return {
             message: hasAssignedDoctor
