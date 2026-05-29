@@ -211,9 +211,61 @@ export class PatientAssignmentService {
         }
 
         const careRequestId = await careRequestService.syncAssignment(patient._id.toString(), doctor._id.toString(), input.actorUserId);
+        
+        let claimedByUserId: string | undefined;
         if (careRequestId) {
             await triageChatService.onboardDoctorForCareRequest(careRequestId, input.actorUserId);
+            
+            // Check if it was claimed before sync
+            const { CareRequest } = await import('../models/CareRequest.model');
+            const reqDoc = await CareRequest.findById(careRequestId);
+            if (reqDoc && reqDoc.claimed_by) {
+                claimedByUserId = reqDoc.claimed_by.toString();
+            }
         }
+
+        // --- Dispatch Real-Time Notifications ---
+        const { notificationService } = await import('./notification.service');
+        const { NotificationType } = await import('../models/enums');
+        
+        const patName = patient.full_name || 'A patient';
+        const docName = doctor.personal_info?.full_name || 'your care team';
+
+        // Notify Patient
+        if (patientUser && patientUser._id) {
+            await notificationService.send({
+                userId: patientUser._id.toString(),
+                type: NotificationType.CARE_REQUEST,
+                title: 'Doctor Assigned',
+                body: `You have been matched with Dr. ${docName}. Your care team is ready!`,
+                link: '/dashboard/patient'
+            }).catch(console.error);
+        }
+
+        // Notify Doctor
+        if (doctorUser && doctorUser._id) {
+            await notificationService.send({
+                userId: doctorUser._id.toString(),
+                type: NotificationType.CARE_REQUEST,
+                title: 'New Patient Assigned',
+                body: `${patName} has been assigned to you.`,
+                link: '/dashboard/doctor/patients'
+            }).catch(console.error);
+        }
+
+        // Notify Assistant if Admin overrides
+        if (input.source === 'admin' && claimedByUserId) {
+            await notificationService.send({
+                userId: claimedByUserId,
+                type: NotificationType.CARE_REQUEST,
+                title: 'Admin Assignment Override',
+                body: `An Admin directly assigned ${patName} to Dr. ${docName}. Your triage claim was resolved.`,
+                link: '/dashboard/doctor/care-requests'
+            }).catch(console.error);
+        }
+        
+        // Emit global system refresh so UI tables update live
+        notificationService.emitSystemEvent('care_request:updated', { patient_id: patient._id }, ['role:super_admin', 'role:assistant']);
 
         return {
             message: currentDoctorId ? 'Patient reassigned to Doctor successfully' : 'Patient assigned to Doctor successfully',
