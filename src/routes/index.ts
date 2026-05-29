@@ -11,6 +11,7 @@ import avatarLibraryRoutes from '../modules/avatarLibrary/avatarLibrary.routes';
 import avatarViewerRoutes from '../modules/avatarViewer/avatarViewer.routes';
 import triageChatRoutes from '../modules/triageChat/triageChat.routes';
 import videoSessionRoutes from '../modules/videoSession/videoSession.routes';
+import notificationRoutes from '../modules/notification/notification.routes';
 
 const router = Router();
 
@@ -59,10 +60,9 @@ router.use('/triage-chat', triageChatRoutes);
 
 // Agora-backed Doctor/patient video sessions
 router.use('/video-sessions', videoSessionRoutes);
-// TODO: Add more routes as modules are built
-// router.use('/sessions', authenticate, sessionRoutes);
-// router.use('/content', authenticate, contentRoutes);
-// router.use('/notifications', authenticate, notificationRoutes);
+
+// In-app notifications (persisted to DB, Redis-cached unread count)
+router.use('/notifications', notificationRoutes);
 
 
 export default router;

@@ -5,6 +5,7 @@ import { redisService } from '../../services/redis.service';
 import { Role } from '../../models/enums';
 import { logger } from '../../utils/logger';
 import { triageChatService } from './triageChat.service';
+import { notificationService } from '../../services/notification.service';
 
 type AuthedSocket = Socket & {
     user?: JwtPayload;
@@ -109,6 +110,12 @@ class TriageChatSocketService {
         });
 
         triageChatService.setRealtimePublisher((event, payload, rooms) => {
+            for (const room of rooms) {
+                this.io?.to(room).emit(event, payload);
+            }
+        });
+
+        notificationService.setSocketPublisher((event, payload, rooms) => {
             for (const room of rooms) {
                 this.io?.to(room).emit(event, payload);
             }
