@@ -6,8 +6,9 @@ import { Doctor as DoctorModel } from '../models/Doctor.model';
 import { SessionBooking } from '../models/SessionBooking.model';
 import { TriageConversation } from '../models/TriageChat.model';
 import { User } from '../models/User.model';
-import { Role, SessionStatus, UserStatus } from '../models/enums';
+import { Role, SessionStatus, UserStatus, NotificationType } from '../models/enums';
 import { BadRequestError, ConflictError, ForbiddenError, NotFoundError } from '../utils/errors';
+import { notificationService } from './notification.service';
 
 const openRequestStatuses: CareRequestStatus[] = [
     'new_request',
@@ -65,6 +66,8 @@ export class CareRequestService {
             await activeRequest.save();
 
             await this.markPatientNeedsCare(patient, data.reason);
+            this.notifyCareRequest(patient, 'updated').catch(err => console.error(err));
+            
             return {
                 message: 'Existing open care request updated',
                 care_request: await this.getFormattedRequest(activeRequest._id.toString())
@@ -86,6 +89,7 @@ export class CareRequestService {
         });
 
         await this.markPatientNeedsCare(patient, data.reason);
+        this.notifyCareRequest(patient, 'created').catch(err => console.error(err));
 
         return {
             message: 'Care request created',
@@ -131,6 +135,8 @@ export class CareRequestService {
             patient.doctor_assigned_at = undefined;
         }
         await patient.save();
+
+        this.notifyCareRequest(patient, 'closed').catch(err => console.error(err));
 
         if (!hasAssignedDoctor) {
             const { triageChatService } = await import('../modules/triageChat/triageChat.service');
@@ -1092,6 +1098,77 @@ export class CareRequestService {
 
     private escapeRegex(value: string) {
         return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    private async notifyCareRequest(patient: any, action: 'created' | 'updated' | 'closed') {
+        try {
+            const hasAssignedDoctor = Boolean(patient.doctor_id);
+            const patientName = patient.full_name || 'A patient';
+            
+            let title = '';
+            let body = '';
+            let doctorLink = '/dashboard/doctor/patients';
+            let adminLink = '/dashboard/admin/assignments';
+
+            if (action === 'closed') {
+                title = 'Care Request Closed';
+                body = `Patient ${patientName} marked that care is no longer needed.`;
+            } else if (action === 'updated') {
+                title = 'Care Request Updated';
+                body = `Patient ${patientName} updated their care request.`;
+            } else {
+                title = 'New Care Request';
+                body = `Patient ${patientName} needs care.`;
+                if (!hasAssignedDoctor) {
+                    title = 'Unassigned Care Request';
+                    body = `Patient ${patientName} submitted a new care request and requires triage.`;
+                }
+            }
+
+            if (hasAssignedDoctor) {
+                // Notify assigned doctor
+                const doctor = await DoctorModel.findById(patient.doctor_id).populate('user_id');
+                if (doctor && doctor.user_id) {
+                    const doctorUserId = (doctor.user_id as any)._id ? (doctor.user_id as any)._id.toString() : doctor.user_id.toString();
+                    await notificationService.send({
+                        userId: doctorUserId,
+                        type: NotificationType.CARE_REQUEST,
+                        title,
+                        body,
+                        link: doctorLink
+                    });
+                }
+                
+                // Notify assigned assistants
+                const assistants = await Assistant.find({ assigned_doctor_ids: patient.doctor_id }).populate('user_id');
+                for (const ast of assistants) {
+                    if (ast.user_id) {
+                        const astUserId = (ast.user_id as any)._id ? (ast.user_id as any)._id.toString() : ast.user_id.toString();
+                        await notificationService.send({
+                            userId: astUserId,
+                            type: NotificationType.CARE_REQUEST,
+                            title,
+                            body,
+                            link: '/dashboard/assistant/patients'
+                        });
+                    }
+                }
+            } else {
+                // Notify all super admins
+                const admins = await User.find({ role: Role.SUPER_ADMIN });
+                for (const admin of admins) {
+                    await notificationService.send({
+                        userId: admin._id.toString(),
+                        type: NotificationType.CARE_REQUEST,
+                        title,
+                        body,
+                        link: adminLink
+                    });
+                }
+            }
+        } catch (error) {
+            console.error('Failed to send care request notification:', error);
+        }
     }
 }
 
