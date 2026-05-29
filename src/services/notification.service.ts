@@ -63,6 +63,12 @@ class NotificationService {
         }
     }
 
+    emitSystemEvent(event: string, payload: unknown, rooms: string[]): void {
+        if (this.socketPublisher) {
+            this.socketPublisher(event, payload, rooms);
+        }
+    }
+
     async getForUser(
         userId: string,
         page: number,

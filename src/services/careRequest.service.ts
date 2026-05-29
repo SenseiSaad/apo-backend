@@ -1157,6 +1157,35 @@ export class CareRequestService {
                         link: adminLink
                     });
                 }
+                
+                // Notify all assistants (they also handle unassigned triage)
+                const allAssistants = await Assistant.find().populate('user_id');
+                for (const ast of allAssistants) {
+                    if (ast.user_id) {
+                        const astUserId = (ast.user_id as any)._id ? (ast.user_id as any)._id.toString() : ast.user_id.toString();
+                        await notificationService.send({
+                            userId: astUserId,
+                            type: NotificationType.CARE_REQUEST,
+                            title,
+                            body,
+                            link: '/dashboard/doctor/care-requests' // Assistant triage route
+                        });
+                    }
+                }
+            }
+
+            // Emit a global system event so frontend UI tables can refresh immediately
+            const eventName = action === 'created' ? 'care_request:created' : 'care_request:updated';
+            if (hasAssignedDoctor) {
+                const doctorUserId = typeof patient.doctor_id === 'object' && 'user_id' in patient.doctor_id 
+                    ? patient.doctor_id.user_id.toString() 
+                    : (await DoctorModel.findById(patient.doctor_id))?.user_id.toString();
+                    
+                if (doctorUserId) {
+                    notificationService.emitSystemEvent(eventName, { patient_id: patient._id }, [`user:${doctorUserId}`]);
+                }
+            } else {
+                notificationService.emitSystemEvent(eventName, { patient_id: patient._id }, ['role:super_admin', 'role:assistant']);
             }
         } catch (error) {
             console.error('Failed to send care request notification:', error);
